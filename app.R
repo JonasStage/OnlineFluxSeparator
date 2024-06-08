@@ -1,122 +1,68 @@
-library(shiny);library(dplyr);library(lubridate)
+library(shiny);library(dplyr);library(lubridate);library(FluxSeparator)
 
-#Dependencies can be install by calling:
-#install.packages(c("shiny", "dplyr", "lubridate"))
 
+#This app was orignially created by Kenneth Thorø Martinsen, but further developed by Methane Insight to incorporate the Methane Insight sensor
 #FluxBandit
 #Shiny app for interactive processing and calculation of greenhouse gas emissions using commercial and DIY type sensor systems
 #Kenneth Thorø Martinsen
 #https://github.com/KennethTM/FluxBandit
 
-version <- "FluxBandit-v0.7"
+version <- "Methane Insights Flux calculator"
 options(shiny.maxRequestSize=50*1024^2)
 
 #Sensor specific functions for parsing sensor data
 #Function should clean/prepare data for flux calculations and return dataframe with columns:
 #datetime, relative humidity (%), air temperature (celcius), CO2 (ppm), CH4 (ppm) and water (ppm)
-parse_diy <- function(path){
-  df <- read.csv(path) |> 
-    filter(!is.na(datetime)) |> 
-    filter(lead(!is.na(SampleNumber)), !is.na(SampleNumber)) |>
-    rename(rh = RH., ch4_smv=CH4smV) |> 
-    mutate(datetime = ymd_hms(datetime),
-           airt = as.numeric(tempC),
-           abs_H = (6.112*exp((17.67*airt)/(airt+243.5))*rh*18.02)/((273.15+airt)*100*0.08314),
-           ppm_H20 = 1358.326542*abs_H,
-           co2 = (K30_CO2/(1-(ppm_H20/10^6))),
-           V0 = abs_H*5.160442+268.39739,
-           RsR0 = ((5000/ch4_smv)-1)/((5000/V0)-1),
-           ch4 = 19.969879*(RsR0^-1.5626939)+-0.0093223822*abs_H*(19.969879*RsR0^-1.5626939)-15.366139) |> 
-    rename(water = ppm_H20) %>% 
-    group_by(datetime) %>% 
-    summarise_at(vars(rh, airt, co2, ch4, water), list(mean)) |> 
-    select(datetime, rh, airt, co2, ch4, water)
-  
-  return(df)
-}
-
-parse_lgr <- function(path){
-  df <- read.csv(path, skip=1) |> 
-    mutate(datetime = dmy_hms(SysTime)) |> 
-    select(datetime, co2 = X.CO2.d_ppm, ch4 = X.CH4.d_ppm, airt = GasT_C, water = X.H2O._ppm)
-  
-  return(df)
-}
-
-parse_licor <- function(path){
-  df <- read.table(path, skip=7, header=FALSE) |> 
-    mutate(datetime = ymd_hms(paste(V7, V8)),
-           ch4 = V11/1000) |> 
-    select(datetime, water = V9, co2 = V10, ch4, airt = V13) |> 
-    filter(!is.na(co2))
-  
-  return(df)
-}
-
-sensor_parsers <- list("DIY" = parse_diy, 
-                       "LGR" = parse_lgr, 
-                       "LICOR" = parse_licor)
 
 ui <- fluidPage(
   
   titlePanel(version),
   
-  em("'Making flux calculations so simple it should be criminal'"),
-  
-  p("Follow the 6 steps to select, save and export your flux measurements!"),
-  
   sidebarLayout(
     
     sidebarPanel(
       
-      tags$b("1) Select sensor type"),
-      
-      radioButtons("filetype", "", choices = c("DIY", "LGR", "LICOR"), selected = ""),
-      
-      tags$p("Optional: Sensor start time (yyyy-mm-dd hh:mm:ss):"), textInput("time_input", NULL, value="", width = "200px"),
-      
-      tags$b("2) Upload text file"),
+      tags$b("Upload data file"),
       
       fileInput("file", "",
                 multiple = FALSE,
                 accept = c("text/csv",
                            "text/comma-separated-values", 
-                           "text/plain",
-                           ".csv", ".txt")),
+                           ".csv")),
       
       tags$hr(),
       
-      tags$b("Step 3) Enter metadata"),
+      tags$b("Enter metadata"),
       
-      tags$p("Chamber volume (L):"), numericInput("chamber_vol", NULL, 280, min = 0, width = "100px"),
+      tags$p("Chamber volume (L):"), numericInput("chamber_vol", NULL, 10, min = 0, width = "100px"),
       
-      tags$p("Chamber area (m2):"), numericInput("chamber_area", NULL, 0.33, min = 0, width = "100px"),
+      tags$p("Chamber area (m2):"), numericInput("chamber_area", NULL, 0.5, min = 0, width = "100px"),
       
       tags$p("Atmos. pressure (atm):"), numericInput("atm_pres", NULL, 1, min = 0, width = "100px"),
       
-      tags$b("Step 4) Adjust time range"),
+      tags$b("Adjust time range"),
       
       sliderInput("range", "",
-                  ymd_hm("2021-01-01 12:00"),
-                  ymd_hm("2021-12-31 12:00"),
-                  c(ymd_hm("2021-01-01 12:00"), 
-                    ymd_hm("2021-12-31 12:00")),
+                  ymd_hm("2024-01-01 12:00"),
+                  ymd_hm("2024-12-31 12:00"),
+                  c(ymd_hm("2024-01-01 12:00"), 
+                    ymd_hm("2024-12-31 12:00")),
                   60*60*24, 
                   timezone="+0000"),
       
       tags$hr(),
       
-      tags$b("5) Select and save flux (repeat)"),
+      tags$b("Select and save flux (repeat)"),
       
       tags$br(),
       
-      tags$p("Sample ID (optional):"), textInput("sample_id", NULL, "ID", width = "200px"),
+      tags$p("Flux ID (optional):"), textInput("sample_id", NULL, "ID", width = "200px"),
       
       actionButton("save", "Save"),
       
       tags$hr(),
       
-      tags$b("6) Download data"),
+      tags$b("Download data"),
       
       tags$br(),
       
@@ -162,7 +108,23 @@ server <- function(input, output, session){
     req(input$file)
     req(input$filetype)
     
-    df <- sensor_parsers[[input$filetype]](input$file$datapath)
+    df <- read.csv(path) %>% 
+      inner_join(by = join_by(serial)) %>% 
+      filter(!is.na(datetime)) %>%  
+      filter(lead(!is.na(SampleNumber)), !is.na(SampleNumber)) %>% 
+      rename(rh = any_of(lookup), ch4_smv=CH4smV) %>% 
+      mutate(datetime = ymd_hms(datetime),
+             airt = as.numeric(tempC),
+             abs_H = (6.112*exp((17.67*airt)/(airt+243.5))*rh*18.02)/((273.15+airt)*100*0.08314),
+             ppm_H20 = 1358.326542*abs_H,
+             co2 = (K30_CO2/(1-(ppm_H20/10^6))),
+             V0 = abs_H*5.160442+268.39739,
+             RsR0 = ((5000/ch4_smv)-1)/((5000/V0)-1),
+             ch4 = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + K) %>% 
+      rename(water = ppm_H20) %>% 
+      group_by(datetime) %>% 
+      summarise_at(vars(rh, airt, co2, ch4, water), list(mean)) %>% 
+      select(datetime, rh, airt, co2, ch4, water)
     
     time_start <- min(df$datetime)
     time_end <- max(df$datetime)
