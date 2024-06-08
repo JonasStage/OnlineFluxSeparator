@@ -1,3 +1,4 @@
+remotes::install_github('JonasStage/FluxSeparator')
 library(shiny);library(dplyr);library(lubridate);library(FluxSeparator)
 
 
@@ -7,12 +8,13 @@ library(shiny);library(dplyr);library(lubridate);library(FluxSeparator)
 #Kenneth Thorø Martinsen
 #https://github.com/KennethTM/FluxBandit
 
-version <- "Methane Insights Flux calculator"
-options(shiny.maxRequestSize=50*1024^2)
+calibration_values <- tibble(a = c(1),
+                             b = c(1),
+                             c = c(1),
+                             K = c(1),
+                             serial = c(1))
 
-#Sensor specific functions for parsing sensor data
-#Function should clean/prepare data for flux calculations and return dataframe with columns:
-#datetime, relative humidity (%), air temperature (celcius), CO2 (ppm), CH4 (ppm) and water (ppm)
+version <- "Methane Insights Flux calculator"
 
 ui <- fluidPage(
   
@@ -106,18 +108,21 @@ server <- function(input, output, session){
   data <- reactive({
     
     req(input$file)
-    req(input$filetype)
     
-    df <- read.csv(path) %>% 
-      inner_join(by = join_by(serial)) %>% 
+    lookup <- c(rh = "RH")
+    
+    df <- read.csv(input$file$datapath) %>% 
+      rename(serial = starts_with("Serial"),
+             rh = starts_with("RH"), 
+             ch4_smv=CH4smV) %>% 
+      inner_join(calibration_values, by = join_by(serial)) %>% 
       filter(!is.na(datetime)) %>%  
       filter(lead(!is.na(SampleNumber)), !is.na(SampleNumber)) %>% 
-      rename(rh = any_of(lookup), ch4_smv=CH4smV) %>% 
       mutate(datetime = ymd_hms(datetime),
              airt = as.numeric(tempC),
              abs_H = (6.112*exp((17.67*airt)/(airt+243.5))*rh*18.02)/((273.15+airt)*100*0.08314),
              ppm_H20 = 1358.326542*abs_H,
-             co2 = (K30_CO2/(1-(ppm_H20/10^6))),
+             co2 = (K33_CO2/(1-(ppm_H20/10^6))),
              V0 = abs_H*5.160442+268.39739,
              RsR0 = ((5000/ch4_smv)-1)/((5000/V0)-1),
              ch4 = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + K) %>% 
