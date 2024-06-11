@@ -203,9 +203,9 @@ server <- function(input, output, session){
   
   data_subset <- reactive({
     req(input$file)
-    
+
     data() %>% 
-      reframe(across(co2, c(mean = mean,var = var))) -> co2_status
+        reframe(across(co2, c(mean = mean,var = var))) -> co2_status
     
     if (!is.null(ranges2$x)) {
       ranges2$x <- as_datetime(ranges2$x)
@@ -218,6 +218,7 @@ server <- function(input, output, session){
       slope_ch4 <- coef(lm_model_ch4)[2]
       intercept_ch4 <- coef(lm_model_ch4)[1]
       r2_ch4 <- summary(lm_model_ch4)$r.squared
+      
       
       mean_temp <- mean(data_subset$airt)
       
