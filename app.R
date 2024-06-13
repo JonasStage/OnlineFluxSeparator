@@ -34,6 +34,34 @@ ui <- fluidPage(
       
       tags$hr(),
       
+      tags$p("Timezone of measurement"), selectizeInput("timezone", "Timezone", width="100%",  
+                                           choices = list("GMT-12"="GMT-12",
+                                                          "GMT-11"="GMT-11",
+                                                          "GMT-10"="GMT-10",
+                                                          "GMT-9"="GMT-9",
+                                                          "GMT-8"="GMT-8",
+                                                          "GMT-7"="GMT-7",
+                                                          "GMT-6"="GMT-6",
+                                                          "GMT-5"="GMT-5",
+                                                          "GMT-4"="GMT-4",
+                                                          "GMT-3"="GMT-3",
+                                                          "GMT-2"="GMT-2",
+                                                          "GMT-1"="GMT-1",
+                                                          "GMT"="GMT",
+                                                          "GMT+1"="GMT+1",
+                                                          "GMT+2"="GMT+2",
+                                                          "GMT+3"="GMT+3",
+                                                          "GMT+4"="GMT+4",
+                                                          "GMT+5"="GMT+5",
+                                                          "GMT+6"="GMT+6",
+                                                          "GMT+7"="GMT+7",
+                                                          "GMT+8"="GMT+8",
+                                                          "GMT+9"="GMT+9",
+                                                          "GMT+10"="GMT+10",
+                                                          "GMT+11"="GMT+11",
+                                                          "GMT+12"="GMT+12")),
+      tags$hr(),
+      
       tags$b("Enter metadata"),
       
       tags$p("Chamber volume (L):"), numericInput("chamber_vol", NULL, 10, min = 0, width = "100px"),
@@ -132,11 +160,36 @@ server <- function(input, output, session){
              co2 = (K33_CO2/(1-(ppm_H20/10^6))),
              V0 = abs_H*5.160442+268.39739,
              RsR0 = ((5000/ch4_smv)-1)/((5000/V0)-1),
-             ch4 = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + K) %>% 
+             ch4 = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + K,
+             datetime = case_when(input$timezone == "GMT-12" ~ datetime-5*3600,
+                                  input$timezone=="GMT-11" ~ datetime-4*3600,
+                                  input$timezone=="GMT-10" ~ datetime-3*3600,
+                                  input$timezone=="GMT-9" ~ datetime-2*3600,
+                                  input$timezone=="GMT-8" ~ datetime-1*3600,
+                                  input$timezone=="GMT-7" ~ datetime-0*3600,
+                                  input$timezone=="GMT-6" ~ datetime+1*3600,
+                                  input$timezone=="GMT-5" ~ datetime+2*3600,
+                                  input$timezone=="GMT-4" ~ datetime+3*3600,
+                                  input$timezone=="GMT-3" ~ datetime+4*3600,
+                                  input$timezone=="GMT-2" ~ datetime+5*3600,
+                                  input$timezone=="GMT-1" ~ datetime+6*3600,
+                                  input$timezone=="GMT" ~ datetime+7*3600,
+                                  input$timezone=="GMT+1" ~ datetime+8*3600,
+                                  input$timezone=="GMT+2" ~ datetime+9*3600,
+                                  input$timezone=="GMT+3" ~ datetime+10*3600,
+                                  input$timezone=="GMT+4" ~ datetime+11*3600,
+                                  input$timezone=="GMT+5" ~ datetime+12*3600,
+                                  input$timezone=="GMT+6" ~ datetime+13*3600,
+                                  input$timezone=="GMT+7" ~ datetime+14*3600,
+                                  input$timezone=="GMT+8" ~ datetime+15*3600,
+                                  input$timezone=="GMT+9" ~ datetime+16*3600,
+                                  input$timezone=="GMT+10" ~ datetime+17*3600,
+                                  input$timezone=="GMT+11" ~ datetime+18*3600,
+                                  input$timezone=="GMT+12" ~ datetime+19*3600)) %>% 
       rename(water = ppm_H20) %>% 
       group_by(datetime) %>% 
       summarise_at(vars(rh, airt, co2, ch4, water), list(mean)) %>% 
-      select(datetime, rh, airt, co2, ch4, water)
+      select(datetime, rh, airt, co2, ch4, water) 
     
     time_start <- min(df$datetime)
     time_end <- max(df$datetime)
@@ -164,7 +217,7 @@ server <- function(input, output, session){
          xlab="Datetime",
          main = "Overview plot",
          col = "darkorange")
-   
+    
      data() %>% 
         reframe(across(co2, c(mean = mean,var = var))) -> co2_status
     
@@ -237,10 +290,10 @@ server <- function(input, output, session){
                                  ", flux = ", round(ch4_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)",
                                  ", R<sup>2</sup> = ", round(r2_ch4, 2))
         
-        results <- data.frame("processing_date" = strftime(Sys.time(), "%Y-%m-%d %H:%M:%S", tz="UTC"),
+        results <- data.frame("processing_date" = strftime(Sys.time(), "%Y-%m-%d %H:%M:%S", tz="GMT"),
                               "id" = as.character(input$sample_id),
-                              "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="UTC"),
-                              "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="UTC"),
+                              "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="GMT"),
+                              "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="GMT"),
                               "CH4_slope" = slope_ch4*3600,
                               "CH4_intercept" = intercept_ch4,
                               "CH4_R2" = r2_ch4,
@@ -266,10 +319,10 @@ server <- function(input, output, session){
                                ", flux = ", round(co2_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)", 
                                ", R<sup>2</sup> = ", round(r2_co2, 2))
       
-        results <- data.frame("processing_date" = strftime(Sys.time(), "%Y-%m-%d %H:%M:%S", tz="UTC"),
+        results <- data.frame("processing_date" = strftime(Sys.time(), "%Y-%m-%d %H:%M:%S", tz="GMT"),
                             "id" = as.character(input$sample_id),
-                            "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="UTC"),
-                            "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="UTC"),
+                            "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="GMT"),
+                            "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="GMT"),
                             "CH4_slope" = slope_ch4*3600,
                             "CH4_intercept" = intercept_ch4,
                             "CH4_R2" = r2_ch4,
