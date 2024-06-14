@@ -138,7 +138,7 @@ server <- function(input, output, session){
     req(input$file)
     
     read_csv(input$file$datapath, col_names = F) %>% 
-      slice(1:3) %>% 
+      slice(1:2) %>% 
       separate(X1, c("col", "number"), ":") %>% 
       mutate(number = str_trim(number)) -> sensor_info
     
@@ -147,7 +147,7 @@ server <- function(input, output, session){
     
     lookup <- c(rh = "RH")
     
-    df <- read_csv(input$file$datapath, skip = 4) %>% 
+    df <- read_csv(input$file$datapath, skip = 3) %>% 
       rename(rh = starts_with("RH"), 
              ch4_smv=CH4smV) %>% 
       cbind(calibration_constants) %>% 
