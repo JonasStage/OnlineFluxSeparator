@@ -129,7 +129,7 @@ ui <- fluidPage(
       
       tags$hr(),
       
-      p("We thank Kenneth T. Martinsen for help developing this app")
+      tags$i("We thank Kenneth T. Martinsen for help developing this app")
       
     )
     
