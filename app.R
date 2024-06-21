@@ -125,7 +125,11 @@ ui <- fluidPage(
       
       tags$b("Saved data"),
       p("Table with saved data, export table as '.csv' file using the download button"),
-      tableOutput("results")
+      tableOutput("results"),
+      
+      tags$hr(),
+      
+      p("We thank Kenneth T. Martinsen for help developing this app")
       
     )
     
