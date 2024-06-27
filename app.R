@@ -147,11 +147,11 @@ server <- function(input, output, session){
       mutate(number = str_trim(number)) -> sensor_info
     
     calibration_values %>% 
-      filter(sn == sensor_info$number[sensor_info$col == "Serial number"]) -> calibration_constants
+      filter(sn == sensor_info$number[sensor_info$col == "SN"]) -> calibration_constants
     
     lookup <- c(rh = "RH")
     
-    df <- read_csv(input$file$datapath, skip = 3) %>% 
+    df <- read_csv(input$file$datapath, skip = 4) %>% 
       rename(rh = starts_with("RH"), 
              ch4_smv=CH4smV) %>% 
       cbind(calibration_constants) %>% 
