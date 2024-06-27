@@ -34,7 +34,7 @@ ui <- fluidPage(
       
       tags$hr(),
       
-      tags$p("Timezone of measurement"), selectizeInput("timezone", "Timezone", width="100%",  
+      tags$b("Timezone of measurement"), selectizeInput("timezone", NULL, width="100%",  
                                            choices = list("GMT-12"="GMT-12",
                                                           "GMT-11"="GMT-11",
                                                           "GMT-10"="GMT-10",
