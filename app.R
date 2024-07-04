@@ -213,25 +213,40 @@ server <- function(input, output, session){
     data_subset <- data() %>% 
       filter(between(datetime, input$range[1], input$range[2]))
     
-    par(mar = c(5,4,4,4) + 0.1)
+    #par(mar = c(5,4,4,4) + 0.1)
     
-    plot(x = data_subset$datetime,
-         y = data_subset$ch4,
-         ylab=expression("CH"[4]*" (ppm)"), 
-         xlab="Datetime",
-         main = "Overview plot",
-         col = "darkorange")
+    # plot(x = data_subset$datetime,
+    #      y = data_subset$ch4,
+    #      ylab=expression("CH"[4]*" (ppm)"), 
+    #      xlab="Datetime",
+    #      main = "Overview plot",
+    #      col = "darkorange")
     
      data() %>% 
         reframe(across(co2, c(mean = mean,var = var))) -> co2_status
     
+    ggplot() + 
+      geom_point(data = data_subset, aes(datetime, ch4, col = "CH4")) + 
+      labs(x = "Datetime",
+           y = bquote("CH"[4]*" (ppm)"),
+           col = "") + 
+      scale_color_manual(limits = c("CH4"),
+                         labels = c(expression("CH"[4])),
+                         values = c("darkorange")) + 
+      scale_x_datetime(date_breaks = "10 min",
+                       date_minor_breaks = "1 min",
+                       date_labels = "%R") + 
+      theme_bw() + 
+      theme(legend.position = "bottom") -> op1
+     
     if (co2_status$co2_mean == 0 & co2_status$co2_var == 0) {
-      legend("topright", 
-             c(expression("CH"[4])), 
-             col = "darkorange", pch=19)
+      # legend("topright", 
+      #        c(expression("CH"[4])), 
+      #        col = "darkorange", pch=19)
+      op1
       } else {
     
-      mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
+      #mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
   
       co2_min = min(data_subset$co2)
       co2_max = max(data_subset$co2)
@@ -246,13 +261,27 @@ server <- function(input, output, session){
       co2_labels = pretty(data_subset$co2)
       co2_at = (ch4_max - ch4_min)*((co2_labels-co2_min)/(co2_max - co2_min))+ch4_min
       
-      points(x = data_subset$datetime, y = co2_scaled, col="forestgreen")
-      axis(4, at = co2_at, labels = co2_labels, col="forestgreen", col.ticks="forestgreen")
+      # points(x = data_subset$datetime, y = co2_scaled, col="forestgreen")
+      # axis(4, at = co2_at, labels = co2_labels, col="forestgreen", col.ticks="forestgreen")
+      # 
+      # legend("topright", 
+      #        c(expression("CH"[4]), expression("CO"[2])), 
+      #        col = c("darkorange","forestgreen"), pch=19)
       
-      legend("topright", 
-             c(expression("CH"[4]), expression("CO"[2])), 
-             col = c("darkorange","forestgreen"), pch=19)
-    }
+      op1 + 
+        geom_point(data = data_subset, aes(datetime, co2_scaled, col = "CO2")) + 
+        labs(x = "Datetime",
+             y = bquote("CH"[4]*" (ppm)"),
+             col = "") + 
+        scale_y_continuous(sec.axis = sec_axis(trans=~., name = bquote("CO"[2]*" (ppm)"),
+                                               breaks = co2_at, labels = co2_labels)) +
+        scale_color_manual(limits = c("CH4","CO2"),
+                           labels = c(expression("CH"[4]),expression("CO"[2])),
+                           values = c("darkorange", "forestgreen")) +
+        scale_x_datetime(date_breaks = "10 min",
+                         date_minor_breaks = "1 min",
+                         date_labels = "%R")
+     }
     
   })
   
@@ -283,9 +312,9 @@ server <- function(input, output, session){
       
       ch4_flux <- (slope_ch4*(input$chamber_vol*input$atm_pres))/(R*(273.15+mean_temp)*input$chamber_area)
       
-        legend("topright", 
-               c(expression("CH"[4])), 
-               col = "darkorange", pch=19)
+        # legend("topright", 
+        #        c(expression("CH"[4])), 
+        #        col = "darkorange", pch=19)
      
       if (co2_status$co2_mean == 0 & co2_status$co2_var == 0) {
         
@@ -360,19 +389,33 @@ server <- function(input, output, session){
     
     par(mar = c(5,4,4,4) + 0.1)
     
-    plot(x = zoom_data$df$sec,
-         y = zoom_data$df$ch4,
-         ylab=expression("CH"[4]*" (ppm)"), 
-         xlab="Time steps",
-         main= "Zoom plot",
-         col = "darkorange")
+    # plot(x = zoom_data$df$sec,
+    #      y = zoom_data$df$ch4,
+    #      ylab=expression("CH"[4]*" (ppm)"), 
+    #      xlab="Time steps",
+    #      main= "Zoom plot",
+    #      col = "darkorange")
+    
     
     water_min = min(zoom_data$df$water)
     ch4_min = min(zoom_data$df$ch4)
     ch4_max = max(zoom_data$df$ch4)
     water_max = max(zoom_data$df$water)
     water_scaled = (ch4_max - ch4_min)*((zoom_data$df$water-water_min)/(water_max - water_min))+ch4_min
-    points(x = zoom_data$df$sec, y = water_scaled, col="lightblue", type="l")
+    # points(x = zoom_data$df$sec, y = water_scaled, col="lightblue", type="l")
+
+    ggplot() + 
+      geom_point(data = zoom_data$df, aes(sec, ch4, col = "CH4")) +
+      geom_smooth(data = zoom_data$df, aes(sec, ch4, col = "CH4"), method = "lm", se = F) +
+      geom_line(data = zoom_data$df, aes(sec, water_scaled, col = "H2O")) +
+      labs(x = "Time steps",
+           y = bquote("CH"[4]*" (ppm)"),
+           col = "") + 
+      scale_color_manual(limits = c("CH4","H2O"),
+                         labels = c(expression("CH"[4]),expression("H"[2]*"O")),
+                         values = c("darkorange", "lightblue")) + 
+      theme_bw() + 
+      theme(legend.position = "bottom") -> p1
     
     if (zoom_data$co2_status$co2_mean == 0 & zoom_data$co2_status$co2_var == 0) {
       if (!is.null(ranges2$x)){
@@ -380,19 +423,19 @@ server <- function(input, output, session){
         output$result_string <- renderText(zoom_data$results_string)
       }
         
-        abline(zoom_data$results$CH4_intercept,
-               zoom_data$results$CH4_slope/3600,
-               col = "darkorange", lwd = 4)
+        # abline(zoom_data$results$CH4_intercept,
+        #        zoom_data$results$CH4_slope/3600,
+        #        col = "darkorange", lwd = 4)
       
         
-      
-      legend("topright", 
-             c(expression("CH"[4]), expression("H"[2]*"O")), 
-             col = c("darkorange", "lightblue"), pch=19)
+      # 
+      # legend("topright", 
+      #        c(expression("CH"[4]), expression("H"[2]*"O")), 
+      #        col = c("darkorange", "lightblue"), pch=19)
       
       } else {
       
-      mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
+      # mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
       co2_min = min(zoom_data$df$co2)
       co2_max = max(zoom_data$df$co2)
         
@@ -404,31 +447,40 @@ server <- function(input, output, session){
       ch4_labels = pretty(zoom_data$df$ch4)
       ch4_at = (co2_max - co2_min)*((ch4_labels-ch4_min)/(ch4_max - ch4_min))+co2_min
       
-      points(x = zoom_data$df$sec, y = co2_scaled, col="forestgreen")
-      axis(4, at = co2_at, labels = co2_labels, col="forestgreen", col.ticks="forestgreen") 
+      # points(x = zoom_data$df$sec, y = co2_scaled, col="forestgreen")
+      # axis(4, at = co2_at, labels = co2_labels, col="forestgreen", col.ticks="forestgreen") 
       
       if (!is.null(ranges2$x)){
         
         output$result_string <- renderText(zoom_data$results_string)
       }
       
-      abline(zoom_data$results$CH4_intercept,
-             zoom_data$results$CH4_slope/3600,
-             col = "darkorange", lwd = 4)
+      # abline(zoom_data$results$CH4_intercept,
+      #        zoom_data$results$CH4_slope/3600,
+      #        col = "darkorange", lwd = 4)
       
       lm_model_co2_scaled <- lm(co2_scaled~zoom_data$df$sec,na.action=na.exclude)
       slope_co2_scaled <- coef(lm_model_co2_scaled)[2]
       intercept_co2_scaled <- coef(lm_model_co2_scaled)[1]
       
-      abline(intercept_co2_scaled,
-             slope_co2_scaled,
-             col = "forestgreen", lwd = 4)
+      # abline(intercept_co2_scaled,
+      #        slope_co2_scaled,
+      #        col = "forestgreen", lwd = 4)
   
     
-      legend("topright", 
-           c(expression("CH"[4]),expression("CO"[2]), expression("H"[2]*"O")), 
-           col = c("darkorange", "forestgreen", "lightblue"), pch=19)
-    
+      # legend("topright", 
+      #      c(expression("CH"[4]),expression("CO"[2]), expression("H"[2]*"O")), 
+      #      col = c("darkorange", "forestgreen", "lightblue"), pch=19)
+      
+      p1 + 
+        geom_point(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2")) +
+        geom_smooth(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F) + 
+        #geom_abline(slope = slope_co2_scaled, intercept = intercept_co2_scaled, aes(col = "CO2")) +
+        scale_color_manual(limits = c("CH4","CO2","H2O"),
+                           labels = c(expression("CH"[4]),expression("CO"[2]),expression("H"[2]*"O")),
+                           values = c("darkorange","forestgreen", "lightblue")) +
+        scale_y_continuous(sec.axis = sec_axis(trans=~., name = bquote("CO"[2]*" (ppm)"),
+                                               breaks = co2_at, labels = co2_labels)) 
       }
   })
   
