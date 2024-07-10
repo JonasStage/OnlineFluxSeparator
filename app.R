@@ -92,12 +92,21 @@ ui <- fluidPage(
       
       tags$hr(),
       
-      tags$b("Download data"),
+      tags$b("Download flux data"),
       
       tags$br(),
       
       #Button to save the file
-      downloadButton('download', 'Download')
+      downloadButton('download', 'Download'),
+      
+      tags$hr(),
+      
+      tags$b("Download methane data"),
+      
+      tags$br(),
+      
+      #Button to save the file
+      downloadButton('ch4_download', 'Download')
       
     ),
     
@@ -507,13 +516,23 @@ server <- function(input, output, session){
   output$download <- downloadHandler(
     
     filename = function() {
-      paste0(version, "-", Sys.Date(), ".csv")
+      paste0(version, "-", Sys.Date(), "_fluxdata.csv")
     },
     
     content = function(file) {
       write.csv(data_out, file, row.names = FALSE)
     })  
-  
+
+  output$ch4_download <- downloadHandler(
+    
+    filename = function() {
+      paste0(version, "-", Sys.Date(), "_ch4data.csv")
+    },
+    
+    content = function(file) {
+      write.csv(data(), file, row.names = FALSE)
+    })  
+    
 }
 
 shinyApp(ui, server)
