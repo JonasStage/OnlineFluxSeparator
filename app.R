@@ -32,22 +32,6 @@ ui <- fluidPage(
                            "text/comma-separated-values", 
                            ".csv")),
       
-      tags$hr(),
-      
-      tags$b("Adjust methane range"),
-      
-      sliderInput("ch4_range", "",
-                  min = 0, max = 10000, value = c(0, 10000)),
-      
-      tags$hr(),
-      
-      tags$b("Adjust CO2 range"),
-      
-      sliderInput("co2_range", "",
-                  min = 0, max = 10000, value = c(0, 10000)),
-      
-      tags$hr(),
-      
       tags$b("Timezone of measurement"), selectizeInput("timezone", NULL, width="100%",  
                                                         choices = list("GMT-12"="GMT-12",
                                                                        "GMT-11"="GMT-11",
@@ -74,9 +58,19 @@ ui <- fluidPage(
                                                                        "GMT+10"="GMT+10",
                                                                        "GMT+11"="GMT+11",
                                                                        "GMT+12"="GMT+12")),
-      tags$hr(),
       
-      tags$b("Adjust time range"),
+      tags$b("Download methane data as csv"),
+      
+      tags$br(),
+      
+      #Button to save the file
+      downloadButton('ch4_download', 'Download'),
+      
+      tags$hr(style = "border-top: 3px solid #000000;"),
+      
+      tags$b("Plotting options"),
+      
+      tags$p("Adjust time range"),
       
       sliderInput("range", "",
                   ymd_hm("2024-01-01 12:00"),
@@ -86,41 +80,36 @@ ui <- fluidPage(
                   60*60*24, 
                   timezone="+0000"),
       
-      tags$hr(),
+      tags$p("Adjust methane range"),
       
-      tags$b("Enter metadata"),
-      
-      tags$p("Chamber volume (L):"), numericInput("chamber_vol", NULL, 10, min = 0, width = "100px"),
-      
-      tags$p("Chamber area (m2):"), numericInput("chamber_area", NULL, 0.5, min = 0, width = "100px"),
-      
-      tags$p("Atmos. pressure (atm):"), numericInput("atm_pres", NULL, 1, min = 0, width = "100px"),
-      
-      tags$b("Select and save flux (repeat)"),
-      
-      tags$br(),
-      
-      tags$p("Flux ID (optional):"), textInput("sample_id", NULL, "ID", width = "200px"),
-      
-      actionButton("save", "Save"),
+      sliderInput("ch4_range", "",
+                  min = 0, max = 10000, value = c(0, 10000)),
       
       tags$hr(),
       
-      tags$b("Download flux data"),
+      tags$p(HTML(paste0("Adjust CO",tags$sub("2")," range"))),
       
-      tags$br(),
+      sliderInput("co2_range", "",
+                  min = 0, max = 10000, value = c(0, 10000)),
       
-      #Button to save the file
-      downloadButton('download', 'Download'),
+      tags$hr(style = "border-top: 3px solid #000000;"),
       
-      tags$hr(),
+      tags$b("Enter chamber metadata"),
+      fluidRow(
+        column(4,
+          tags$p("Chamber volume (L):")),
+        column(4,
+          tags$p(HTML(paste0("Chamber area (m",tags$sup(2),"):")))),
+        column(4,
+          tags$p("Atmos. pressure (atm):"))),
       
-      tags$b("Download methane data"),
-      
-      tags$br(),
-      
-      #Button to save the file
-      downloadButton('ch4_download', 'Download')
+      fluidRow(
+        column(4,
+          numericInput("chamber_vol", NULL, 10, min = 0)),
+        column(4,
+               numericInput("chamber_area", NULL, 0.5, min = 0)),
+        column(4,
+               numericInput("atm_pres", NULL, 1, min = 0))),
       
     ),
     
@@ -135,7 +124,7 @@ ui <- fluidPage(
                    resetOnNew = TRUE
                  )),
       
-      tags$hr(),
+      tags$hr(style = "border-top: 3px solid #000000;"),
       
       tags$b("Zoom plot"),
       p("Use mouse to select measurements in the main plot"),
@@ -144,13 +133,30 @@ ui <- fluidPage(
       
       htmlOutput("result_string"), 
       
-      tags$hr(),
+      tags$hr(style = "border-top: 3px solid #000000;"),
+      
+      tags$b("Save flux of zoom plot"),
+      
+      tags$p("Flux ID (optional):"), 
+      
+      fluidRow(
+        column(4,
+               textInput("sample_id", NULL, "ID", width = "200px")),
+        column(2,
+                actionButton("save", "Save"))),
       
       tags$b("Saved data"),
       p("Table with saved data, export table as '.csv' file using the download button"),
       tableOutput("results"),
       
-      tags$hr(),
+      tags$b("Download flux data as csv"),
+      
+      tags$br(),
+      
+      #Button to save the file
+      downloadButton('download', 'Download'),
+      
+      tags$hr(style = "border-top: 3px solid #000000;"),
       
       tags$i("We thank Kenneth T. Martinsen for help developing this app")
       
@@ -236,8 +242,6 @@ server <- function(input, output, session){
     updateSliderInput(session, "co2_range", value = c(co2_start, co2_end),
                       min = co2_start, max = co2_end, step = 100)
     
-    
-    
     return(df)
     
     
@@ -250,7 +254,7 @@ server <- function(input, output, session){
     data_subset <- data() %>% 
       filter(between(datetime, input$range[1], input$range[2]),
              between(ch4, input$ch4_range[1],input$ch4_range[2]),
-             between(co2, input$co2_range[1],input$co2_range[2]),)
+             between(co2, input$co2_range[1],input$co2_range[2]))
     
     #par(mar = c(5,4,4,4) + 0.1)
     
@@ -445,7 +449,7 @@ server <- function(input, output, session){
     
     ggplot() + 
       geom_point(data = zoom_data$df, aes(sec, ch4, col = "CH4")) +
-      geom_smooth(data = zoom_data$df, aes(sec, ch4, col = "CH4"), method = "lm", se = F) +
+      geom_smooth(data = zoom_data$df, aes(sec, ch4, col = "CH4"), method = "lm", se = F, formula = 'y ~ x') +
       geom_line(data = zoom_data$df, aes(sec, water_scaled, col = "H2O")) +
       labs(x = "Time steps",
            y = bquote("CH"[4]*" (ppm)"),
@@ -513,7 +517,7 @@ server <- function(input, output, session){
       
       p1 + 
         geom_point(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2")) +
-        geom_smooth(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F) + 
+        geom_smooth(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F,formula = 'y ~ x') + 
         #geom_abline(slope = slope_co2_scaled, intercept = intercept_co2_scaled, aes(col = "CO2")) +
         scale_color_manual(limits = c("CH4","CO2","H2O"),
                            labels = c(expression("CH"[4]),expression("CO"[2]),expression("H"[2]*"O")),
