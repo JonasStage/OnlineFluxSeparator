@@ -237,10 +237,10 @@ server <- function(input, output, session){
                       min = time_start, max = time_end, step = 60)
     
     updateSliderInput(session, "ch4_range", value = c(ch4_start, ch4_end),
-                      min = ch4_start, max = ch4_end, step = 10)
+                      min = ch4_start, max = ch4_end, step = 1)
     
     updateSliderInput(session, "co2_range", value = c(co2_start, co2_end),
-                      min = co2_start, max = co2_end, step = 100)
+                      min = co2_start, max = co2_end, step = 1)
     
     return(df)
     
