@@ -171,7 +171,7 @@ server <- function(input, output, session){
     req(input$file)
     
     read_csv(input$file$datapath, col_names = F) %>% 
-      slice(1:2) %>% 
+      slice(1:3) %>% 
       separate(X1, c("col", "number"), ":") %>% 
       mutate(number = str_trim(number)) -> sensor_info
     
@@ -180,11 +180,36 @@ server <- function(input, output, session){
     
     lookup <- c(rh = "RH")
     
-    df <- read_csv(input$file$datapath, skip = 4) %>% 
+    df <- read_csv(input$file$datapath, skip = 4, col_names = F,
+                   col_types = cols(X3 = col_character(), 
+                                    X4 = col_double(), 
+                                    X5 = col_double(), 
+                                    X6 = col_double(), 
+                                    X7 = col_double(), 
+                                    X8 = col_double(), 
+                                    X9 = col_double(), 
+                                    X10 = col_double(), 
+                                    X11 = col_double(), 
+                                    X12 = col_integer(), 
+                                    X13 = col_integer())) %>% 
+      rename(millis = X1, 
+             stampunix = X2,
+             datetime = X3,
+             RH = X4,
+             tempC = X5,
+             CH4smV = X6,
+             CH4rmV = X7,
+             VbatmV = X8,
+             K33_RH = X9,
+             K33_Temp = X10,
+             K33_CO2 = X11,
+             SampleNumber = X12,
+             PumpCycle = X13) %>% 
       rename(rh = starts_with("RH"), 
              ch4_smv=CH4smV) %>% 
       cbind(calibration_constants) %>% 
-      filter(!is.na(datetime)) %>%  
+      filter(!is.na(datetime),
+             between(rh, 0,100)) %>%  
       filter(lead(!is.na(SampleNumber)), !is.na(SampleNumber)) %>% 
       mutate(datetime = ymd_hms(datetime),
              airt = as.numeric(tempC),
@@ -224,14 +249,14 @@ server <- function(input, output, session){
       summarise_at(vars(rh, airt, co2, ch4, water), list(mean)) %>% 
       select(datetime, rh, airt, co2, ch4, water) 
     
-    time_start <- min(df$datetime)
-    time_end <- max(df$datetime)
+    time_start <- min(df$datetime, na.rm =T)
+    time_end <- max(df$datetime, na.rm =T)
     
     ch4_start <- floor(min(df$ch4, na.rm=T))
     ch4_end <- ceiling(max(df$ch4, na.rm=T))
     
-    co2_start <- floor(min(df$co2))
-    co2_end <- ceiling(max(df$co2))
+    co2_start <- floor(min(df$co2, na.rm =T))
+    co2_end <- ceiling(max(df$co2, na.rm =T))
     
     updateSliderInput(session, "range", value = c(time_start, time_end),
                       min = time_start, max = time_end, step = 60)
