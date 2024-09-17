@@ -1,6 +1,5 @@
-Serial number: 553132313031082E13,,,,,,,,,,,,,
+Serial number: 20240001,,,,,,,,,,,,,
 Software version: 3.0,,,,,,,,,,,,,
-Firmware version: 10.0,,,,,,,,,,,,,
 ,,,,,,,,,,,,,
 millis,stampunix,datetime,RH,tempC,CH4smV, CH4rmV, VbatmV, K33_RH, K33_Temp, K33_CO2, SampleNumber, PumpCycle,Serial number
 3999,1710776801, 2024/3/18 15:46:41,57.29,23.73,520.31,2522.62,4184.57,0,0,0,1,1,1

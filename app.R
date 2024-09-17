@@ -172,16 +172,18 @@ server <- function(input, output, session){
     
     read_csv(input$file$datapath, col_names = F) %>% 
       slice(1:3) %>% 
-      separate(X1, c("col", "number"), ":") %>% 
-      mutate(number = str_trim(number)) -> sensor_info
+      separate(X1, c("col", "sn"), ":") %>% 
+      mutate(sn = str_trim(sn)) -> sensor_info
     
     calibration_values %>% 
-      filter(sn == sensor_info$number[sensor_info$col == "SN"]) -> calibration_constants
+      filter(sn == sensor_info$sn[sensor_info$col == "SN"][1]) -> calibration_constants
     
     lookup <- c(rh = "RH")
     
     df <- read_csv(input$file$datapath, skip = 4, col_names = F,
-                   col_types = cols(X3 = col_character(), 
+                   col_types = cols(X1 = col_integer(),
+                                    X2 = col_integer(),
+                                    X3 = col_character(), 
                                     X4 = col_double(), 
                                     X5 = col_double(), 
                                     X6 = col_double(), 
@@ -190,8 +192,7 @@ server <- function(input, output, session){
                                     X9 = col_double(), 
                                     X10 = col_double(), 
                                     X11 = col_double(), 
-                                    X12 = col_integer(), 
-                                    X13 = col_integer())) %>% 
+                                    X12 = col_integer())) %>% 
       rename(millis = X1, 
              stampunix = X2,
              datetime = X3,
@@ -203,8 +204,7 @@ server <- function(input, output, session){
              K33_RH = X9,
              K33_Temp = X10,
              K33_CO2 = X11,
-             SampleNumber = X12,
-             PumpCycle = X13) %>% 
+             SampleNumber = X12) %>% 
       rename(rh = starts_with("RH"), 
              ch4_smv=CH4smV) %>% 
       cbind(calibration_constants) %>% 
@@ -436,20 +436,20 @@ server <- function(input, output, session){
                               "CH4_flux_umol_m2_h" = ch4_flux*3600,
                               "CO2_flux_umol_m2_h" = co2_flux*3600)
       }  
-    }else{
-      data_subset <- data() %>% 
-        mutate(sec = cumsum(c(0, diff(as.numeric(datetime))))) 
-      
-      results <- data.frame()
-      results_string <- ""
-    }
+          }else{
+            data_subset <- data() %>% 
+              mutate(sec = cumsum(c(0, diff(as.numeric(datetime))))) 
+            
+            results <- data.frame()
+            results_string <- ""
+          }
     
     return(list("df" = data_subset, 
                 "results" = results, 
                 "results_string" = results_string,
                 "co2_status" = co2_status))
     
-  })
+              })
   
   output$plot_zoom <- renderPlot({
     
@@ -486,8 +486,8 @@ server <- function(input, output, session){
       theme(legend.position = "bottom") -> p1
     
     if (zoom_data$co2_status$co2_mean == 0 & zoom_data$co2_status$co2_var == 0) {
+      print(p1)
       if (!is.null(ranges2$x)){
-        
         output$result_string <- renderText(zoom_data$results_string)
       }
       
