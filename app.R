@@ -1,5 +1,5 @@
 #remotes::install_github('JonasStage/FluxSeparator')
-library(shiny);library(dplyr);library(lubridate);library(FluxSeparator)
+library(shiny);library(dplyr);library(lubridate)
 
 
 #This app was orignially created by Kenneth Thorø Martinsen, but further developed by Methane Insight to incorporate the Methane Insight sensor
@@ -8,17 +8,15 @@ library(shiny);library(dplyr);library(lubridate);library(FluxSeparator)
 #Kenneth Thorø Martinsen
 #https://github.com/KennethTM/FluxBandit
 
-calibration_values <- tibble(a = c(15.4768338368636,20.8996128188715,12.0845179165111,12.2594795072657,13.9216687951681,49.0404640934359,11.7011477005422,9.6180853386033,13.1916048746485,11.7554751062074,31.0227651438435,29.1574861544143,26.6193278389359,23.8469981981315,29.9795114367573,29.2294056064029,28.0100368200649),
-                             b = c(-2.32360295751295,-2.22627910918598,-2.3787693734589,-2.39192348962588,-2.34249066118252,-1.65550641092781,-2.37851604735124,-2.44571700230746,-2.34121741388962,-2.39340719818715,-1.65251694906984,-1.64569674887371,-1.67228132720796,-1.7548224913487,-1.67515145390934,-1.66729080836813,-1.63808073922792),
-                             c = c(0.0126397200417818,0.00822950843337005,0.0163314353163035,0.0154301494872903,0.0125812082880863,-0.00187060171893217,0.0146885897494805,0.0165647799054871,0.0119841220501089,0.014910073633549,0.016724087602713,0.017660492924417,0.0183358457211479,0.0196049052667293,0.0157013643210769,0.0164819759211981,0.0179553258480187),
-                             K = c(-16.9608100504465,-21.4564061807386,-13.7341088044704,-13.6483519113557,-14.7282666782522,-38.4740785534197,-12.5266323282912,-10.2113099605425,-13.5405790944116,-12.7672040616553,-35.3915382672584,-33.7280055392781,-31.0614833057482,-28.0406584405676,-33.712226027174,-33.1443929000967,-32.8184662774513),
-                             sn = c('20240001','20240002','20240003','20240004','20240005','20240006','20240007','20240008','20240009','20240010','20240011','20240012','20240013','20240014','20240015','20240017','20240018'))
+options(shiny.maxRequestSize = 100*1024^2)
 
-version <- "Methane Insight fluxR"
+read_csv("Data/all_sensor_model_coef.csv") -> model_coef
+
+name <- "Methane sensor calculations"
 
 ui <- fluidPage(
   
-  titlePanel(version),
+  titlePanel(name),
   
   sidebarLayout(
     
@@ -32,42 +30,13 @@ ui <- fluidPage(
                            "text/comma-separated-values", 
                            ".csv")),
       
-      tags$b("Timezone of measurement"), selectizeInput("timezone", NULL, width="100%",  
-                                                        choices = list("GMT-12"="GMT-12",
-                                                                       "GMT-11"="GMT-11",
-                                                                       "GMT-10"="GMT-10",
-                                                                       "GMT-9.5"="GMT-9.5",
-                                                                       "GMT-9"="GMT-9",
-                                                                       "GMT-8"="GMT-8",
-                                                                       "GMT-7"="GMT-7",
-                                                                       "GMT-6"="GMT-6",
-                                                                       "GMT-5"="GMT-5",
-                                                                       "GMT-4"="GMT-4",
-                                                                       "GMT-3.5"="GMT-3.5",
-                                                                       "GMT-3"="GMT-3",
-                                                                       "GMT-2"="GMT-2",
-                                                                       "GMT-1"="GMT-1",
-                                                                       "GMT"="GMT",
-                                                                       "GMT+1"="GMT+1",
-                                                                       "GMT+2"="GMT+2",
-                                                                       "GMT+3"="GMT+3",
-                                                                       "GMT+3.5"="GMT+3.5",
-                                                                       "GMT+4"="GMT+4",
-                                                                       "GMT+4.5"="GMT+4.5",
-                                                                       "GMT+5"="GMT+5",
-                                                                       "GMT+5.5"="GMT+5.5",
-                                                                       "GMT+6"="GMT+6",
-                                                                       "GMT+6.5"="GMT+6.5",
-                                                                       "GMT+7"="GMT+7",
-                                                                       "GMT+8"="GMT+8",
-                                                                       "GMT+9"="GMT+9",
-                                                                       "GMT+9.5"="GMT+9.5",
-                                                                       "GMT+10"="GMT+10",
-                                                                       "GMT+10.5"="GMT+10.5",
-                                                                       "GMT+11"="GMT+11",
-                                                                       "GMT+12"="GMT+12",
-                                                                       "GMT+13"="GMT+13",
-                                                                       "GMT+14"="GMT+14")),
+      textInput("sensor_name","Input sensor name for calibration"),
+      
+      tags$b("Timezone of measurement (UTC)"), numericInput("timezone",
+                                                      label = "",
+                                                      value = 0,
+                                                      min = -12,
+                                                      max = 14),
       
       tags$b("Download methane data as csv"),
       
@@ -179,14 +148,12 @@ server <- function(input, output, session){
   data <- reactive({
     
     req(input$file)
+    req(input$sensor_name)
+    req(input$timezone)
     
-    read_csv(input$file$datapath, col_names = F) %>% 
-      slice(1:3) %>% 
-      separate(X1, c("col", "sn"), ":") %>% 
-      mutate(sn = str_trim(sn)) -> sensor_info
-    
-    calibration_values %>% 
-      filter(sn == sensor_info$sn[sensor_info$col == "SN"][1]) -> calibration_constants
+    model_coef %>% 
+      mutate(sensor == str_to_upper(sensor)) %>% 
+      filter(sensor == str_to_upper(input$sensor_name)) -> calibration_constants
     
     lookup <- c(rh = "RH")
     
@@ -202,7 +169,8 @@ server <- function(input, output, session){
                                     X9 = col_double(), 
                                     X10 = col_double(), 
                                     X11 = col_double(), 
-                                    X12 = col_integer())) %>% 
+                                    X12 = col_integer(),
+                                    X13 = col_integer())) %>% 
       rename(millis = X1, 
              stampunix = X2,
              datetime = X3,
@@ -214,7 +182,8 @@ server <- function(input, output, session){
              K33_RH = X9,
              K33_Temp = X10,
              K33_CO2 = X11,
-             SampleNumber = X12) %>% 
+             SampleNumber = X12,
+             PumpCycle = X13) %>% 
       rename(rh = starts_with("RH"), 
              ch4_smv=CH4smV) %>% 
       cbind(calibration_constants) %>% 
@@ -229,45 +198,11 @@ server <- function(input, output, session){
              V0 = abs_H*5.160442+268.39739,
              RsR0 = ((5000/ch4_smv)-1)/((5000/V0)-1),
              ch4 = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + K,
-             datetime = case_when(input$timezone == "GMT-12" ~ datetime-5*3600,
-                                  input$timezone=="GMT-11" ~ datetime-4*3600,
-                                  input$timezone=="GMT-10" ~ datetime-3*3600,
-                                  input$timezone=="GMT-9.5" ~ datetime-2.5*3600,
-                                  input$timezone=="GMT-9" ~ datetime-2*3600,
-                                  input$timezone=="GMT-8" ~ datetime-1*3600,
-                                  input$timezone=="GMT-7" ~ datetime-0*3600,
-                                  input$timezone=="GMT-6" ~ datetime+1*3600,
-                                  input$timezone=="GMT-5" ~ datetime+2*3600,
-                                  input$timezone=="GMT-4" ~ datetime+3*3600,
-                                  input$timezone=="GMT-3.5" ~ datetime+3.5*3600,
-                                  input$timezone=="GMT-3" ~ datetime+4*3600,
-                                  input$timezone=="GMT-2" ~ datetime+5*3600,
-                                  input$timezone=="GMT-1" ~ datetime+6*3600,
-                                  input$timezone=="GMT" ~ datetime+7*3600,
-                                  input$timezone=="GMT+1" ~ datetime+8*3600,
-                                  input$timezone=="GMT+2" ~ datetime+9*3600,
-                                  input$timezone=="GMT+3" ~ datetime+10*3600,
-                                  input$timezone=="GMT+3.5" ~ datetime+10.5*3600,
-                                  input$timezone=="GMT+4" ~ datetime+11*3600,
-                                  input$timezone=="GMT+4.5" ~ datetime+11.5*3600,
-                                  input$timezone=="GMT+5" ~ datetime+12*3600,
-                                  input$timezone=="GMT+5.5" ~ datetime+12.5*3600,
-                                  input$timezone=="GMT+6" ~ datetime+13*3600,
-                                  input$timezone=="GMT+6.5" ~ datetime+13.5*3600,
-                                  input$timezone=="GMT+7" ~ datetime+14*3600,
-                                  input$timezone=="GMT+8" ~ datetime+15*3600,
-                                  input$timezone=="GMT+9" ~ datetime+16*3600,
-                                  input$timezone=="GMT+9.5" ~ datetime+16.5*3600,
-                                  input$timezone=="GMT+10" ~ datetime+17*3600,
-                                  input$timezone=="GMT+10.5" ~ datetime+17.5*3600,
-                                  input$timezone=="GMT+11" ~ datetime+18*3600,
-                                  input$timezone=="GMT+12" ~ datetime+19*3600,
-                                  input$timezone=="GMT+13" ~ datetime+20*3600,
-                                  input$timezone=="GMT+14" ~ datetime+21*3600)) %>% 
+             datetime = datetime+(input$timezone-1)*3600) %>% 
       rename(water = ppm_H20) %>% 
       group_by(datetime) %>% 
-      summarise_at(vars(rh, airt, co2, ch4, water), list(mean)) %>% 
-      select(datetime, rh, airt, co2, ch4, water) 
+      summarise_at(vars(rh, airt, co2, ch4, water,PumpCycle), list(mean)) %>% 
+      select(datetime, rh, airt, co2, ch4, water,PumpCycle) 
     
     time_start <- min(df$datetime, na.rm =T)
     time_end <- max(df$datetime, na.rm =T)
@@ -473,7 +408,12 @@ server <- function(input, output, session){
   
   output$plot_zoom <- renderPlot({
     
-    zoom_data <- data_subset()
+    zoom_data <- data_subset() 
+    
+    zoom_plot_data <- zoom_data$df %>% 
+      filter(between(ch4,input$ch4_range[1], input$ch4_range[2]),
+             between(co2,input$co2_range[1],input$co2_range[2]))
+    print(zoom_plot_data)
     
     par(mar = c(5,4,4,4) + 0.1)
     
@@ -485,17 +425,17 @@ server <- function(input, output, session){
     #      col = "darkorange")
     
     
-    water_min = min(zoom_data$df$water)
-    ch4_min = min(zoom_data$df$ch4)
-    ch4_max = max(zoom_data$df$ch4)
-    water_max = max(zoom_data$df$water)
-    water_scaled = (ch4_max - ch4_min)*((zoom_data$df$water-water_min)/(water_max - water_min))+ch4_min
+    water_min = min(zoom_plot_data$water)
+    ch4_min = min(zoom_plot_data$ch4)
+    ch4_max = max(zoom_plot_data$ch4)
+    water_max = max(zoom_plot_data$water)
+    water_scaled = (ch4_max - ch4_min)*((zoom_plot_data$water-water_min)/(water_max - water_min))+ch4_min
     # points(x = zoom_data$df$sec, y = water_scaled, col="lightblue", type="l")
     
     ggplot() + 
-      geom_point(data = zoom_data$df, aes(sec, ch4, col = "CH4")) +
-      geom_smooth(data = zoom_data$df, aes(sec, ch4, col = "CH4"), method = "lm", se = F, formula = 'y ~ x') +
-      geom_line(data = zoom_data$df, aes(sec, water_scaled, col = "H2O")) +
+      geom_point(data = zoom_plot_data, aes(sec, ch4, col = "CH4")) +
+      geom_smooth(data = zoom_plot_data, aes(sec, ch4, col = "CH4"), method = "lm", se = F, formula = 'y ~ x') +
+      geom_line(data = zoom_plot_data, aes(sec, water_scaled, col = "H2O")) +
       labs(x = "Time steps",
            y = bquote("CH"[4]*" (ppm)"),
            col = "") + 
@@ -524,15 +464,15 @@ server <- function(input, output, session){
     } else {
       
       # mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
-      co2_min = min(zoom_data$df$co2)
-      co2_max = max(zoom_data$df$co2)
+      co2_min = min(zoom_plot_data$co2)
+      co2_max = max(zoom_plot_data$co2)
       
-      co2_scaled = (ch4_max - ch4_min)*((zoom_data$df$co2-co2_min)/(co2_max - co2_min))+ch4_min
-      co2_labels = pretty(zoom_data$df$co2)
+      co2_scaled = (ch4_max - ch4_min)*((zoom_plot_data$co2-co2_min)/(co2_max - co2_min))+ch4_min
+      co2_labels = pretty(zoom_plot_data$co2)
       co2_at = (ch4_max - ch4_min)*((co2_labels-co2_min)/(co2_max - co2_min))+ch4_min
       
-      ch4_scaled = (co2_max - co2_min)*((zoom_data$df$ch4-ch4_min)/(ch4_max - ch4_min))+co2_min
-      ch4_labels = pretty(zoom_data$df$ch4)
+      ch4_scaled = (co2_max - co2_min)*((zoom_plot_data$ch4-ch4_min)/(ch4_max - ch4_min))+co2_min
+      ch4_labels = pretty(zoom_plot_data$ch4)
       ch4_at = (co2_max - co2_min)*((ch4_labels-ch4_min)/(ch4_max - ch4_min))+co2_min
       
       # points(x = zoom_data$df$sec, y = co2_scaled, col="forestgreen")
@@ -547,7 +487,7 @@ server <- function(input, output, session){
       #        zoom_data$results$CH4_slope/3600,
       #        col = "darkorange", lwd = 4)
       
-      lm_model_co2_scaled <- lm(co2_scaled~zoom_data$df$sec,na.action=na.exclude)
+      lm_model_co2_scaled <- lm(co2_scaled~zoom_plot_data$sec,na.action=na.exclude)
       slope_co2_scaled <- coef(lm_model_co2_scaled)[2]
       intercept_co2_scaled <- coef(lm_model_co2_scaled)[1]
       
@@ -561,8 +501,8 @@ server <- function(input, output, session){
       #      col = c("darkorange", "forestgreen", "lightblue"), pch=19)
       
       p1 + 
-        geom_point(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2")) +
-        geom_smooth(data = zoom_data$df, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F,formula = 'y ~ x') + 
+        geom_point(data = zoom_plot_data, aes(sec, co2_scaled, col = "CO2")) +
+        geom_smooth(data = zoom_plot_data, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F,formula = 'y ~ x') + 
         #geom_abline(slope = slope_co2_scaled, intercept = intercept_co2_scaled, aes(col = "CO2")) +
         scale_color_manual(limits = c("CH4","CO2","H2O"),
                            labels = c(expression("CH"[4]),expression("CO"[2]),expression("H"[2]*"O")),
@@ -609,7 +549,9 @@ server <- function(input, output, session){
     },
     
     content = function(file) {
-      write.csv(data(), file, row.names = FALSE)
+      data() %>% 
+        rename('rh (%)' = rh, 'airt (°C)' = airt, 'CO2 (ppm)' = co2, 'CH4 (ppm)' = ch4, "H2O (ppm)" = water) ->data_write
+      write.csv(data_write, file, row.names = FALSE)
     })  
   
 }
