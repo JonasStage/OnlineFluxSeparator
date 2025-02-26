@@ -301,8 +301,8 @@ server <- function(input, output, session){
         scale_color_manual(limits = c("CH4","CO2"),
                            labels = c(expression("CH"[4]),expression("CO"[2])),
                            values = c("darkorange", "forestgreen")) +
-        scale_x_datetime(date_breaks = "10 min",
-                         date_minor_breaks = "1 min",
+        scale_x_datetime(date_breaks = "1 hour",
+                         date_minor_breaks = "30 min",
                          date_labels = "%R")
     }
     
