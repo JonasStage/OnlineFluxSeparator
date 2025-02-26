@@ -1,5 +1,5 @@
 #remotes::install_github('JonasStage/FluxSeparator')
-library(shiny);library(dplyr);library(lubridate)
+library(shiny);library(dplyr);library(lubridate);library(tidyverse)
 
 
 #This app was orignially created by Kenneth Thorø Martinsen, but further developed by Methane Insight to incorporate the Methane Insight sensor
