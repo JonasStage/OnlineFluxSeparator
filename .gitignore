@@ -6,3 +6,5 @@
 .DS_Store
 *.Rproj
 /Data/Test data
+.DS_Store
+Data/Test data/
