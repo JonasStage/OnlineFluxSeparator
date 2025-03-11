@@ -1,6 +1,7 @@
 
-library(shiny);library(dplyr);library(lubridate);library(tidyverse);library(mailtoR);library(shinydashboard);library(TTR);library(patchwork)
+library(shiny);library(dplyr);library(lubridate);library(tidyverse);library(mailtoR);library(shinydashboard);library(TTR);library(patchwork);library(HMR);library(DT)
 source("ebul_flux_func.R", local = T)
+source("diff_flux_func.R", local = T)
 
 #This app was orignially created by Kenneth Thorø Martinsen, but further developed by Methane Insight to incorporate the Methane Insight sensor
 #FluxBandit
@@ -18,11 +19,13 @@ ui <- dashboardPage(
     sidebarMenu(
       id = "tabs",
       menuItem("Start", tabName = "start", icon = icon("door-open")),
-      menuItem("Bubble finder", tabName = "ebul", icon = icon("circle"))
+      menuItem("Bubble flux", tabName = "ebul", icon = icon("circle")),
+      menuItem("Diffusive flux", tabName = "diff", icon = icon("chart-line"))
       )
     ),
     dashboardBody(
       tabItems(
+        # Start UI tab ----
         tabItem(tabName = "start",
         titlePanel("Methane sensor calculations"),
         
@@ -97,7 +100,6 @@ ui <- dashboardPage(
                           choices = c(colnames(data()),NA_character_)),
               selectInput("sep_column","Select measurement separator column if applicable",
                           choices = c(colnames(data()),NA_character_))
-              
               ),
             tags$b("Download methane data as csv"),
             
@@ -193,7 +195,7 @@ ui <- dashboardPage(
             
             tags$b("Saved data"),
             p("Table with saved data, export table as '.csv' file using the download button"),
-            tableOutput("results"),
+            DTOutput("results"),
             
             tags$b("Download flux data as csv"),
             
@@ -209,6 +211,7 @@ ui <- dashboardPage(
             
             h6(em("We thank Kenneth T. Martinsen for help developing this app"))
           ))),
+        # Ebul UI tab ----
         tabItem(tabName = "ebul",
                 sidebarLayout(
                   sidebarPanel(
@@ -237,6 +240,55 @@ ui <- dashboardPage(
                       sliderInput("plot_number_select", "Switch between plots",
                                   min = 1, max = 100, value = 1, step = 1),
                       align = "center"),
+                    DTOutput("ebul_table"),
+                    column(
+                      12,
+                      downloadButton('download_ebul', 'Download shown fluxes'),
+                      align = "center")
+                    ))),
+        # Diff UI tab ----
+          tabItem(tabName = "diff",
+                  sidebarLayout(
+                    sidebarPanel(
+                      selectInput("concentration_values_diff","Select concentration column",
+                                  choices = c(colnames(data())),
+                                  selected = "ch4"),
+                      tags$b("Only calculate diffusive fluxes where there has been no previous bubbles"),
+                      checkboxInput("look_for_bubbles","Look for bubbles",value = T),
+                      sliderInput("remove_observations_prior", "How many observations to remove prior to calculations of diffusive flux",
+                                  min = 0, max = 10000, value = 200, step = 1),
+                      sliderInput("number_of_observations_used", "How many observations to use for the calculations of diffusive flux",
+                                  min = 0, max = 10000, value = 400, step = 1),
+                      sliderInput("number_of_observations_required", "How many are required before diffusive flux is calculated",
+                                  min = 0, max = 10000, value = 50, step = 1),
+                      sliderInput("cutoff_start_value", "The upper value that a starting concentration can be",
+                                  min = 0, max = 10000, value = 2, step = 1),
+                      sliderInput("number_of_pumpcycles_in_plot_diff", "How many plots to show at the same time",
+                                  min = 1, max = 24, value = 10, step = 1),
+                      tags$b("Choose whether or not to smooth data"),
+                      checkboxInput("smooth_data_diff","Smooth data",value = F),
+                      tags$b("Choose whether or not to apply the Hutchinson-Mosier correction"),
+                      checkboxInput("hmr_correction","Hutchinson-Mosier correction",value = F),
+                      tags$b("Supply volume and area if Hutchinson-Mosier correction is to be applied"),
+                        column(
+                          6,numericInput("volume_diff", "Volume (L)", 10, min = 0)
+                          ),
+                        column(
+                          6, numericInput("area_diff", HTML(paste0("Chamber area (m",tags$sup(2),"):")), 0.5, min = 0),
+                          )),
+                    mainPanel(
+                      h3("To calculate diffusive fluxes, ensure you have also considered the ebullitive fluxes on the previous page or select to not look for bubbles"),
+                      plotOutput("plot_diff"),
+                      column(
+                        12,
+                        sliderInput("plot_number_select_diff", "Switch between plots",
+                                    min = 1, max = 100, value = 1, step = 1),
+                        align = "center"),
+                      DTOutput("diff_table"),
+                      column(
+                        12,
+                        downloadButton('download_diff', 'Download shown fluxes'),
+                        align = "center"),
                     )))
       )))
 
@@ -395,6 +447,8 @@ server <- function(input, output, session){
                       min = co2_start, max = co2_end, step = 1)
     
     updateSelectInput(session, "concentration_values", choices = colnames(df), select = "ch4")
+    updateSelectInput(session, "concentration_values_diff", choices = colnames(df), select = "ch4")
+    
     
     return(df)
   })
@@ -604,7 +658,6 @@ server <- function(input, output, session){
             results <- data.frame()
             results_string <- ""
           }
-    
     return(list("df" = data_subset, 
                 "results" = results, 
                 "results_string" = results_string,
@@ -619,6 +672,7 @@ server <- function(input, output, session){
         need(input$concentration_values_ch4_column, message = ""))
     } else {}
     zoom_data <- data_subset() 
+    
     
     zoom_plot_data <- zoom_data$df %>% 
       filter(between(ch4,input$ch4_range[1], input$ch4_range[2]),
@@ -720,12 +774,17 @@ server <- function(input, output, session){
   })
   
   observeEvent(input$save,{
-    data_out <<- rbind(data_out, data_subset()$results)
-    output$results <- renderTable(
-      data_out[, c("id", "start", "end","CH4_R2", "CH4_flux_umol_m2_h","CO2_R2", "CO2_flux_umol_m2_h")])
+    data_out <<- rbind(data_out, data_subset()$results) %>% 
+      mutate(across(where(is.double), ~round(.x, 3)))
+    output$results <- renderDT(
+      data_out %>% 
+        select_if(names(.) %in% c("id", "start", "end","CH4_R2", "CH4_flux_umol_m2_h1","CO2_R2", "CO2_flux_umol_m2_h1")),
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames= FALSE)
   })
   
   # FluxSeparator ----
+  ## Ebul ----
   fluxsep_ebul <- reactive({
       data() %>% 
       ungroup %>% 
@@ -744,15 +803,119 @@ server <- function(input, output, session){
                 smooth_data = input$smooth_data) -> ebul
     
     updateSliderInput(session, "plot_number_select",min = min(ebul_df$plot_number), max = max(ebul_df$plot_number),step = 1)
-    
-    max_number_of_pump <- ebul_df %>% distinct(PumpCycle) %>% count
-  
-    updateSliderInput(session,"number_of_pumpcycles_in_plot", min = 1, max = max_number_of_pump$n, step = 1,
-                      value = max_number_of_pump$n/2)
+
     return(ebul)
   })
-  
+
+  observeEvent(input$concentration_values, { 
+    max_number_of_pump <- fluxsep_ebul()$bubbles %>% select(PumpCycle) %>% ungroup %>% count()
+    
+    updateSliderInput(session,"number_of_pumpcycles_in_plot", min = 1, max = max_number_of_pump$n, step = 1,
+                      value = max_number_of_pump$n/2)
+  })
+    
   output$plot2  <- renderPlot(fluxsep_ebul()$plot)
+  
+  output$ebul_table <- DT::renderDT(fluxsep_ebul()$bubbles %>% 
+                                     select(c(station:datetime_end, temp, concentration_per_hour = concentration_per_time)) %>% 
+                                     mutate(across(temp:concentration_per_hour, ~round(.x, 3)),
+                                            datetime_start = strftime(datetime_start, format = '%Y-%m-%d %R'),
+                                            datetime_end = strftime(datetime_end, format = '%Y-%m-%d %R')) %>% 
+                                     rename("concentration_per_hour (ppm h-1)" = concentration_per_hour,
+                                             'airt (°C)' = temp),
+                                    options = list(pageLength = 10, autoWidth = TRUE),
+                                    rownames= FALSE)
+  
+  output$download_ebul <- downloadHandler(
+    filename = function() {
+      paste0(Sys.Date(), "_ebullitive_fluxdata.csv")
+    },
+    content = function(file) {
+      fluxsep_ebul()$bubbles %>% 
+        rename("concentration_per_hour (ppm h-1)" = concentration_per_time,
+               'airt (°C)' = temp) %>% 
+        write.csv(file, row.names = FALSE)
+    }
+  )
+  
+  ## Diff ----
+  fluxsep_diff <- reactive({
+    data() %>% 
+      ungroup %>% 
+      mutate(station = "1",
+             plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot_diff)+1,
+             sensor = "1")  -> diff_df
+
+    diff_df %>% 
+      filter(plot_number == input$plot_number_select_diff) %>% 
+      diff_flux(concentration_values = input$concentration_values_diff, 
+                IndexSpan = input$indexspan, 
+                runvar_cutoff = input$runvar_cutoff,
+                remove_observations_prior = input$remove_observations_prior,
+                number_of_observations_used = input$number_of_observations_used,
+                cutoff_start_value = input$cutoff_start_value,
+                number_of_observations_required = input$number_of_observations_required,
+                number_of_pumpcycles_in_plot = input$number_of_pumpcycles_in_plot_diff, 
+                smooth_data = input$smooth_data_diff,
+                look_for_bubbles = input$look_for_bubbles, 
+                Hutchinson_Mosier_correction = input$hmr_correction,
+                volume = input$volume_diff,
+                area = input$area_diff) -> diff
+  
+    validate(
+      need(diff[1] != "ERROR! NO DATA",
+           message = "Couldn't find any diffusive fluxes. Try lowering the runvar_cutoff or turning off looking for bubbles")
+    )
+    
+    diff_df %>% 
+      select(input$concentration_values_diff) %>% 
+      pull() -> cutoff_start_value_helper
+    
+    diff_df %>% 
+      count(PumpCycle) %>% 
+      pull(n) %>% 
+      max() -> max_antal_diff
+    
+     updateSliderInput(session, "plot_number_select_diff",min = min(diff_df$plot_number), max = max(diff_df$plot_number),step = 1)
+     updateSliderInput(session, "remove_observations_prior", min = 0, max = max_antal_diff, step = 1)
+     updateSliderInput(session, "number_of_observations_used", min = 3, max = max_antal_diff, step = 1)
+     updateSliderInput(session, "cutoff_start_value", min = floor(min(cutoff_start_value_helper, na.rm=T)), max = ceiling(max(cutoff_start_value_helper, na.rm=T)), 
+                       step = 1, value = ceiling(max(cutoff_start_value_helper, na.rm=T)))
+     updateSliderInput(session, "number_of_observations_required", min = 3, max = max_antal_diff, step = 1)
+    return(diff)
+  })
+  
+  observeEvent(input$concentration_values_diff, { 
+    max_number_of_pump_diff <- fluxsep_diff()$diff %>% select(PumpCycle) %>% ungroup %>% count()
+    
+    updateSliderInput(session,"number_of_pumpcycles_in_plot_diff", min = 1, max = max_number_of_pump_diff$n, step = 1,
+                       value = max_number_of_pump_diff$n/2)
+  })
+  
+  output$plot_diff  <- renderPlot(fluxsep_diff()$plot)
+  
+  output$diff_table <- renderDT(fluxsep_diff()$diff %>% 
+                                  mutate(across(slope_concentration_hr:temp, ~round(.x,3)),
+                                         datetime_start = strftime(datetime_start, format = '%Y-%m-%d %R'),
+                                         datetime_end = strftime(datetime_end, format = '%Y-%m-%d %R')) %>% 
+                                  rename("slope_concentration_hr (ppm h-1)" = slope_concentration_hr,
+                                         'airt (°C)' = temp),
+                                options = list(pageLength = 10, autoWidth = TRUE),
+                                rownames= FALSE)
+  
+  output$download_diff <- downloadHandler(
+    filename = function() {
+      paste0(Sys.Date(), "_diffusive_fluxdata.csv")
+    },
+    content = function(file) {
+      fluxsep_diff()$diff %>% 
+        rename("slope_concentration_hr (ppm h-1)" = slope_concentration_hr,
+               'airt (°C)' = temp) %>% 
+      write.csv(file, row.names = FALSE)
+    }
+  )
+  
+  # Downloads ----
   
   output$download <- downloadHandler(
     
@@ -772,12 +935,10 @@ server <- function(input, output, session){
     
     content = function(file) {
       data() %>% 
-        rename('rh (%)' = rh, 'airt (°C)' = airt, 'CO2 (ppm)' = co2, 'CH4 (ppm)' = ch4, "H2O (ppm)" = water) ->data_write
-      write.csv(data_write, file, row.names = FALSE)
+        rename('rh (%)' = rh, 'airt (°C)' = airt, 'CO2 (ppm)' = co2, 'CH4 (ppm)' = ch4, "H2O (ppm)" = water)  %>% 
+        write.csv(data_write, file, row.names = FALSE)
     })  
 
-  output$error_msg <- renderText({"No sensor with that name is present in the Jonas' calibration file"})
-  
 }
 
 shinyApp(ui, server)
