@@ -1,5 +1,6 @@
 
-library(shiny);library(dplyr);library(lubridate);library(tidyverse);library(mailtoR);library(shinydashboard);library(TTR);library(patchwork);library(HMR);library(DT)
+library(shiny);library(dplyr);library(lubridate);library(ggplot2);library(mailtoR);library(shinydashboard);library(TTR);library(patchwork);library(HMR);library(DT)
+library(readr);library(stringr)
 source("ebul_flux_func.R", local = T)
 source("diff_flux_func.R", local = T)
 
