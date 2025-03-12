@@ -1,6 +1,6 @@
 
 library(shiny);library(dplyr);library(lubridate);library(ggplot2);library(mailtoR);library(shinydashboard);library(TTR);library(patchwork);library(HMR);library(DT)
-library(readr);library(stringr)
+library(readr);library(stringr);library(tidyr);library(purrr)
 source("ebul_flux_func.R", local = T)
 source("diff_flux_func.R", local = T)
 
@@ -887,7 +887,7 @@ server <- function(input, output, session){
   })
   
   observeEvent(input$concentration_values_diff, { 
-    max_number_of_pump_diff <- fluxsep_diff()$diff %>% select(PumpCycle) %>% ungroup %>% count()
+    max_number_of_pump_diff <- fluxsep_diff()$diff %>% ungroup %>% select(PumpCycle) %>% count()
     
     updateSliderInput(session,"number_of_pumpcycles_in_plot_diff", min = 1, max = max_number_of_pump_diff$n, step = 1,
                        value = max_number_of_pump_diff$n/2)
