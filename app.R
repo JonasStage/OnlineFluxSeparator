@@ -38,7 +38,7 @@ ui <- dashboardPage(
                      This website was originally made to ease the usage of DIY sensors for <a href='https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2024JG008035'> CH<sub>4</sub> and CO<sub>2</sub></a> supplied by the author. 
                      Nevertheless, increasing interest fueled me to incorporate other types of sensors.<br>
                      
-                     <h2>How to start</h2>
+                     <h2>Where to start</h2>
                      Start by selecting the 'Start' tab on the left side, here you can upload your data and make sure the formatting is correct. 
                      Before uploading the data a selection can be made whether to use 'DIY' sensors, which refers to paper just above, or 'Other' which can be any format. 
                      The 'Start' page also displays your data, allowing you to zoom in on particular areas and calculate the flux from these areas.
