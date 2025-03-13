@@ -20,7 +20,7 @@ ui <- dashboardPage(
       id = "tabs",
       menuItem("Welcome", tabName = "intro", icon = icon("door-open")),
       menuItem("Start", tabName = "start", icon = icon("play")),
-      menuItem("Bubble flux", tabName = "ebul", icon = icon("circle")),
+      menuItem("Ebullitive flux", tabName = "ebul", icon = icon("circle")),
       menuItem("Diffusive flux", tabName = "diff", icon = icon("chart-line"))
       )
     ),
@@ -37,9 +37,14 @@ ui <- dashboardPage(
                      
                      This website was originally made to ease the usage of DIY sensors for <a href='https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2024JG008035'> CH<sub>4</sub> and CO<sub>2</sub></a> supplied by the author. 
                      Nevertheless, increasing interest fueled me to incorporate other types of sensors.<br>
+                     
+                     <h2>How to start</h2>
+                     Start by selecting the 'Start' tab on the left side, here you can upload your data and make sure the formatting is correct. 
+                     Before uploading the data a selection can be made whether to use 'DIY' sensors, which refers to paper just above, or 'Other' which can be any format. 
+                     The 'Start' page also displays your data, allowing you to zoom in on particular areas and calculate the flux from these areas.
+                     After uploading the data and ensuring it all looks good, you can head on to one of the next tabs for calculating either ebullitive or diffusive fluxes. <br> 
+                     
                      <h2>Theory behind the calculations </h2>
-                 
-                 
                      <h3>Ebullitive flux</h3>
                      Most notable is the runvar_cutoff variable which determines the threshold value of the running variance, with running variances above this threshold being considered bubbles.
                      Furthermore, selections allow the user to include more or less observations before and after the bubble, or set a minimum threshold for the concentration change caused by the ebullitive event.<br>
