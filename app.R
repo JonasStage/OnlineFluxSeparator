@@ -1,5 +1,4 @@
-
-library(shiny);library(dplyr);library(lubridate);library(ggplot2);library(mailtoR);library(shinydashboard);library(TTR);library(patchwork);library(HMR);library(DT)
+library(shiny);library(dplyr);library(lubridate);library(ggplot2);library(shinydashboard);library(TTR);library(patchwork);library(HMR);library(DT)
 library(readr);library(stringr);library(tidyr);library(purrr)
 source("ebul_flux_func.R", local = T)
 source("diff_flux_func.R", local = T)
@@ -19,13 +18,55 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
-      menuItem("Start", tabName = "start", icon = icon("door-open")),
+      menuItem("Welcome", tabName = "intro", icon = icon("door-open")),
+      menuItem("Start", tabName = "start", icon = icon("play")),
       menuItem("Bubble flux", tabName = "ebul", icon = icon("circle")),
       menuItem("Diffusive flux", tabName = "diff", icon = icon("chart-line"))
       )
     ),
     dashboardBody(
       tabItems(
+        # Intro UI tab ----
+        tabItem(tabName = "intro",
+                HTML("
+                     <h2>Introduction to the Methane flux calculator</h2>
+                     Welcome to this website which helps to calculate fluxes. 
+                     The website allows the user to separate ebullitive (bubble) and diffusive fluxes. 
+                     The technique for separation ebullitive and diffusive fluxes is based on the R-package <a href='https://github.com/JonasStage/FluxSeparator'> <em>FluxSeparator</em></a> with minor alterations. 
+                     Similar results can be obtained by using the R-package in R, however, this website allows for easy usage and testing how different parameters affect your fluxes.<br>
+                     
+                     This website was originally made to ease the usage of DIY sensors for <a href='https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2024JG008035'> CH<sub>4</sub> and CO<sub>2</sub></a> supplied by the author. 
+                     Nevertheless, increasing interest fueled me to incorporate other types of sensors.<br>
+                     <h2>Theory behind the calculations </h2>
+                 
+                 
+                     <h3>Ebullitive flux</h3>
+                     Most notable is the runvar_cutoff variable which determines the threshold value of the running variance, with running variances above this threshold being considered bubbles.
+                     Furthermore, selections allow the user to include more or less observations before and after the bubble, or set a minimum threshold for the concentration change caused by the ebullitive event.<br>
+                     <h3>Diffusive flux</h3>
+                     The diffusive flux allows the user to also consider the bubbles from the ebullitive flux function. 
+                     If this is selected the function will only calculate diffuisve fluxes before any bubbles occur, to ensure concentrations are not elevated. 
+                     A possibility to not look for bubbles is also present, which is useful when looking at CO<sub>2</sub> fluxes.
+                     For more information on how to use the different parameters and how the separation of fluxes is done, see <a href='https://doi.org/10.1029/2024JG008035'> this paper</a> <br><br>
+                     
+                     <h2>Citing this tool</h2>
+                     Please cite the <a href='https://doi.org/10.1029/2024JG008035'> paper introducing the R-package</a> and the <a href='https://doi.org/10.5281/zenodo.8297154'> R-package </a> when using this tool: <br><br>
+                     <em>Sø, J. S., Sand-Jensen, K., & Kragh, T. (2024). Self-made equipment for automatic methane diffusion and ebullition measurements from aquatic environments. Journal of Geophysical Research: Biogeosciences, 129, e2024JG008035. https://doi.org/10.1029/2024JG008035</em><br><br>
+                     <em>Sø, J. S., Sand-Jensen, K., & Kragh, T. (2023). FluxSeparator - Separation of diffusive and ebullitive fluxes (v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.8297154</em><br>
+                    
+                     <h2>Wrapping up</h2>
+                     
+                     I expect there will be encounters of errors while using the website, which I would gladly try to accomodate, so please let me know.
+                     Additionally, don't hesitate to contact me if you have ideas on how to improve this website.<br><br>
+                     This website is made by <a href='mailto:Jonassoe@biology.sdu.dk'</a> Jonas Stage Sø </a>, Ph.D., Postdoc at The University of Southern Denmark. <br><br>
+                     
+                     <center>
+                     <a href='https://www.researchgate.net/profile/Jonas-Stage-So?ev=hdr_xprf' <i class='fa-brands fa-researchgate' style='font-size: 6em'></i></a>
+                     <a href='https://github.com/JonasStage' <i class='fa-brands fa-github' style='font-size: 6em'></i></a><br><br><br>
+                     </center>
+                     
+                     <h6><em>We thank Kenneth T. Martinsen for help developing this app</em></h6>"),
+                ),
         # Start UI tab ----
         tabItem(tabName = "start",
         titlePanel("Methane sensor calculations"),
@@ -157,7 +198,6 @@ ui <- dashboardPage(
           ),
           
           mainPanel(
-            
             conditionalPanel(
               condition = "input.file_type == 'Other'",
               h5("A preview of you data will show here to help ensure data is correctly formatted. If the preview does not appear as a table try altering the amount of rows that are to be skipped"),
@@ -206,14 +246,10 @@ ui <- dashboardPage(
             downloadButton('download', 'Download'),
             
             tags$hr(style = "border-top: 3px solid #000000;"),
-            
-            h5("This website is made by ",mailtoR(email = "Jonassoe@biology.sdu.dk",
-                                                       text = "Jonas Stage Sø"), ", Ph.D., Postdoc at The University of Southern Denmark"),
-            
-            h6(em("We thank Kenneth T. Martinsen for help developing this app"))
           ))),
         # Ebul UI tab ----
         tabItem(tabName = "ebul",
+        titlePanel("Ebullitive flux"),
                 sidebarLayout(
                   sidebarPanel(
                     selectInput("concentration_values","Select concentration column",
@@ -249,6 +285,7 @@ ui <- dashboardPage(
                     ))),
         # Diff UI tab ----
           tabItem(tabName = "diff",
+            titlePanel("Diffusive flux"),
                   sidebarLayout(
                     sidebarPanel(
                       selectInput("concentration_values_diff","Select concentration column",
@@ -678,8 +715,7 @@ server <- function(input, output, session){
     zoom_plot_data <- zoom_data$df %>% 
       filter(between(ch4,input$ch4_range[1], input$ch4_range[2]),
              between(co2,input$co2_range[1],input$co2_range[2]))
-    print(zoom_plot_data)
-    
+
     par(mar = c(5,4,4,4) + 0.1)
     
     # plot(x = zoom_data$df$sec,
