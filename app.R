@@ -828,7 +828,10 @@ server <- function(input, output, session){
   # FluxSeparator ----
   ## Ebul ----
   fluxsep_ebul <- reactive({
-      data() %>% 
+    data() %>% 
+      filter(between(datetime, input$range[1], input$range[2]),
+             between(ch4, input$ch4_range[1],input$ch4_range[2]),
+             between(co2, input$co2_range[1],input$co2_range[2])) %>% 
       ungroup %>% 
       mutate(station = 1,
              plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot)+1,
@@ -883,6 +886,9 @@ server <- function(input, output, session){
   ## Diff ----
   fluxsep_diff <- reactive({
     data() %>% 
+      filter(between(datetime, input$range[1], input$range[2]),
+             between(ch4, input$ch4_range[1],input$ch4_range[2]),
+             between(co2, input$co2_range[1],input$co2_range[2])) %>% 
       ungroup %>% 
       mutate(station = "1",
              plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot_diff)+1,
