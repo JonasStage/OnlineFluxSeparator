@@ -244,7 +244,9 @@ ui <- dashboardPage(
               column(4,
                      textInput("sample_id", NULL, "ID", width = "200px")),
               column(2,
-                      actionButton("save", "Save"))),
+                      actionButton("save", "Save")),
+              column(2,
+                      actionButton("delete_saved", "Delete all saved data"))),
             
             tags$b("Saved data"),
             p("Table with saved data, export table as '.csv' file using the download button"),
@@ -821,6 +823,17 @@ server <- function(input, output, session){
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames= FALSE)
   })
+    
+  observeEvent(input$delete_saved, {
+    data_out <<- data_out[,0]
+    
+    output$results <- renderDT(
+      data_out %>% 
+        select_if(names(.) %in% c("id", "start", "end","concentration1_name","concentration1_R2", "concentration1_flux_umol_m2_h1","concentration2_name","concentration2_R2", "concentration2_flux_umol_m2_h1")),
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames= FALSE)
+  })    
+    
   
   # FluxSeparator ----
   ## Ebul ----
