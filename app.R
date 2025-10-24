@@ -29,7 +29,7 @@ ui <- dashboardPage(
         # Intro UI tab ----
         tabItem(tabName = "intro",
                 HTML("
-                     <h2>Introduction to the Methane flux calculator</h2>
+                     <h2>Introduction to the flux calculator</h2>
                      Welcome to this website which helps to calculate fluxes. 
                      The website allows the user to separate ebullitive (bubble) and diffusive fluxes. 
                      The technique for separation ebullitive and diffusive fluxes is based on the R-package <a href='https://github.com/JonasStage/FluxSeparator'> <em>FluxSeparator</em></a> with minor alterations. 
@@ -74,7 +74,7 @@ ui <- dashboardPage(
                 ),
         # Start UI tab ----
         tabItem(tabName = "start",
-        titlePanel("Methane sensor calculations"),
+        titlePanel("Flux sensor calculations"),
         
         sidebarLayout(
           
@@ -137,18 +137,22 @@ ui <- dashboardPage(
                                       "DMY-HMS")),
               selectInput("datetime_column","Select datetime column",
                           choices = c(colnames(data()))),
-              selectInput("concentration_values_ch4_column","Select CH4 concentration column",
+              selectInput("concentration_values_ch4_column","Select first concentration column",
                           choices = c(colnames(data()))),
+              radioButtons("unit_concentration1", "Select units for the first concentration column",
+                          choices = c("ppm","ppb")),
               selectInput("airt_column","Select temperature column (°C)",
                           choices = c(colnames(data()),NA_character_)),
-              selectInput("concentration_values_co2_column","Select CO2 concentration column if applicable",
+              selectInput("concentration_values_co2_column","Select second concentration column if applicable",
                           choices = c(colnames(data()),NA_character_)),
+              radioButtons("unit_concentration2", "Select units for the second concentration column",
+                          choices = c("ppm","ppb")),
               selectInput("water_column","Select water vapor concentration column if applicable",
                           choices = c(colnames(data()),NA_character_)),
               selectInput("sep_column","Select measurement separator column if applicable",
                           choices = c(colnames(data()),NA_character_))
               ),
-            tags$b("Download methane data as csv"),
+            tags$b("Download data as csv"),
             
             tags$br(),
             
@@ -169,14 +173,14 @@ ui <- dashboardPage(
                         60*60*24, 
                         timezone="+0000"),
             
-            tags$p("Adjust methane range"),
+            tags$p("Adjust first concentration range"),
             
             sliderInput("ch4_range", "",
                         min = 0, max = 10000, value = c(0, 10000)),
             
             tags$hr(),
             
-            tags$p(HTML(paste0("Adjust CO",tags$sub("2")," range"))),
+            tags$p(HTML(paste0("Adjust second contration range"))),
             
             sliderInput("co2_range", "",
                         min = 0, max = 10000, value = c(0, 10000)),
@@ -199,6 +203,9 @@ ui <- dashboardPage(
                      numericInput("chamber_area", NULL, 0.5, min = 0)),
               column(4,
                      numericInput("atm_pres", NULL, 1, min = 0))),
+            
+            textInput("y_axis", "First concentration name"),
+            textInput("y2_axis", "Second concentration name"),
             
           ),
           
@@ -299,13 +306,13 @@ ui <- dashboardPage(
                       tags$b("Only calculate diffusive fluxes where there has been no previous bubbles"),
                       checkboxInput("look_for_bubbles","Look for bubbles",value = T),
                       sliderInput("remove_observations_prior", "How many observations to remove prior to calculations of diffusive flux",
-                                  min = 0, max = 10000, value = 200, step = 1),
+                                  min = 0, max = 10000, value = 1, step = 1),
                       sliderInput("number_of_observations_used", "How many observations to use for the calculations of diffusive flux",
                                   min = 0, max = 10000, value = 400, step = 1),
                       sliderInput("number_of_observations_required", "How many are required before diffusive flux is calculated",
                                   min = 0, max = 10000, value = 50, step = 1),
                       sliderInput("cutoff_start_value", "The upper value that a starting concentration can be",
-                                  min = 0, max = 10000, value = 2, step = 1),
+                                  min = 0, max = 10000, value = 100, step = 1),
                       sliderInput("number_of_pumpcycles_in_plot_diff", "How many plots to show at the same time",
                                   min = 1, max = 24, value = 10, step = 1),
                       tags$b("Choose whether or not to smooth data"),
@@ -313,12 +320,13 @@ ui <- dashboardPage(
                       tags$b("Choose whether or not to apply the Hutchinson-Mosier correction"),
                       checkboxInput("hmr_correction","Hutchinson-Mosier correction",value = F),
                       tags$b("Supply volume and area if Hutchinson-Mosier correction is to be applied"),
+                      fluidRow(
                         column(
                           6,numericInput("volume_diff", "Volume (L)", 10, min = 0)
                           ),
                         column(
                           6, numericInput("area_diff", HTML(paste0("Chamber area (m",tags$sup(2),"):")), 0.5, min = 0),
-                          )),
+                          ))),
                     mainPanel(
                       h3("To calculate diffusive fluxes, ensure you have also considered the ebullitive fluxes on the previous page or select to not look for bubbles"),
                       plotOutput("plot_diff"),
@@ -427,22 +435,25 @@ server <- function(input, output, session){
         read_csv(input$file$datapath,
                  skip = input$skip_rows,
                  col_types = cols(.default = col_character())) -> file_upload
-      } else if(input$file_format == ".txt"){
+      } else if(input$file_format %in% c(".txt",".data")){
         read_delim(input$file$datapath,
                    delim = "\t",
                    skip = input$skip_rows,
                    col_types = cols(.default = col_character())) -> file_upload
-      } else if(input$file_format == ".data"){
-        read_delim(input$file$datapath,
-                   delim = "\t",
-                   skip = input$skip_rows,
-                   col_types = cols(.default = col_character())) -> file_upload
+      
+      }
+      
+      if(!"datetime" %in% colnames(file_upload) & ncol(file_upload) > 6 & "date" %in% colnames(file_upload) & "time" %in% colnames(file_upload)){
+      file_upload <- file_upload %>% 
+        mutate(datetime = paste(date,time))
       }
       
       datetime_format <- input$datetime_format
+      unit1 <- input$unit_concentration1
+      unit2 <- input$unit_concentration2
       
       file_upload %>% 
-        cbind(datetime_format) %>% 
+        cbind(datetime_format,unit1,unit2) %>% 
         rename(datetime = any_of(input$datetime_column),
                ch4 = any_of(input$concentration_values_ch4_column),
                co2 = any_of(input$concentration_values_co2_column),
@@ -453,21 +464,32 @@ server <- function(input, output, session){
                                     datetime_format == "YDM-HMS" ~ ydm_hms(datetime),
                                     datetime_format == "MDY-HMS" ~ mdy_hms(datetime),
                                     datetime_format == "DMY-HMS" ~ dmy_hms(datetime)),
-                across(any_of(c("ch4","co2","water","airt","PumpCycle")), ~ parse_number(.x))) %>% 
+               across(any_of(c("ch4","co2","water","airt","PumpCycle")), ~ parse_number(.x))) %>% 
         select_if(names(.) %in% c('datetime', 'airt', 'co2',"ch4","water","PumpCycle")) -> df
       
-      if(!"PumpCycle" %in% colnames(df)) {
-        df <- df %>% mutate(PumpCycle = 1)
-      } else {}
-      if(!"co2" %in% colnames(df)){
-        df <- df %>% mutate(co2 = 0)
+      
+      if(input$unit_concentration1 == "ppb") {
+      df <- df %>% 
+        mutate(ch4 = ch4/1000)
       }
-      if(!"water" %in% colnames(df)){
-        df <- df %>% mutate(water = 0)
+      if(input$unit_concentration2 == "ppb") {
+        df <- df %>% 
+          mutate(co2 = co2/1000)
       }
-      if(!"airt" %in% colnames(df)){
-        df <- df %>% mutate(airt = 0)
-      }
+      
+      
+        if(!"PumpCycle" %in% colnames(df)) {
+          df <- df %>% mutate(PumpCycle = 1)
+        }
+        if(!"co2" %in% colnames(df)){
+          df <- df %>% mutate(co2 = 0)
+        }
+        if(!"water" %in% colnames(df)){
+          df <- df %>% mutate(water = 0)
+        }
+        if(!"airt" %in% colnames(df)){
+          df <- df %>% mutate(airt = 0)
+        }
       
       }
     
@@ -491,8 +513,7 @@ server <- function(input, output, session){
     
     updateSelectInput(session, "concentration_values", choices = colnames(df), select = "ch4")
     updateSelectInput(session, "concentration_values_diff", choices = colnames(df), select = "ch4")
-    
-    
+    updateSelectInput(session, "datetime_column", choices = colnames(df), select = "NA_character_")
     return(df)
   })
   
@@ -508,18 +529,14 @@ server <- function(input, output, session){
       read_csv(input$file$datapath,
                skip = input$skip_rows,
                col_types = cols(.default = col_character())) -> file_upload
-    } else if(input$file_format == ".txt"){
-      read_delim(input$file$datapath,
-                 delim = "\t",
-                 skip = input$skip_rows,
-                 col_types = cols(.default = col_character())) -> file_upload
-    } else if(input$file_format == ".data"){
+    } else if(input$file_format %in% c(".txt",".data")) {
       read_delim(input$file$datapath,
                  delim = "\t",
                  skip = input$skip_rows,
                  col_types = cols(.default = col_character())) -> file_upload
     }
-    updateSelectInput(session, "datetime_column", choices = colnames(file_upload), select = "NA_character_")
+    
+    updateSelectInput(session, "datetime_column", choices = c(colnames(file_upload),"datetime"), select = "NA_character_")
     updateSelectInput(session, "concentration_values_ch4_column", choices = c(colnames(file_upload),NA_character_), select = "NA_character_")
     updateSelectInput(session, "concentration_values_co2_column", choices = c(colnames(file_upload),NA_character_), select = "NA_character_")
     updateSelectInput(session, "water_column", choices = c(colnames(file_upload),NA_character_), select = "NA_character_")
@@ -528,7 +545,7 @@ server <- function(input, output, session){
     
     output$head_df<- renderTable({
       file_upload %>% 
-        head(5)
+        head(5) 
     })
   })
   
@@ -538,8 +555,8 @@ server <- function(input, output, session){
     if(input$file_type == "Other") {
       validate(
         need(input$datetime_column, message = "Needs to input datetime column"),
-        need(input$concentration_values_ch4_column, message = "Needs to input methane concentration column"))
-    } else {}
+        need(input$concentration_values_ch4_column, message = "Needs to input first concentration column"))
+    } 
     req(data())
     data_subset <- data() %>% 
       filter(between(datetime, input$range[1], input$range[2]),
@@ -547,15 +564,16 @@ server <- function(input, output, session){
              between(co2, input$co2_range[1],input$co2_range[2]))
     
     data() %>% 
-      reframe(across(co2, c(mean = mean,var = var))) -> co2_status
+      reframe(co2_mean = mean(co2, na.rm =T),
+              co2_var = var(co2, na.rm=T)) -> co2_status
     
     ggplot() + 
       geom_point(data = data_subset, aes(datetime, ch4, col = "CH4")) + 
       labs(x = "Datetime",
-           y = bquote("CH"[4]*" (ppm)"),
+           y = input$y_axis,
            col = "") + 
       scale_color_manual(limits = c("CH4"),
-                         labels = c(expression("CH"[4])),
+                         labels = input$y_axis,
                          values = c("darkorange")) + 
       scale_x_datetime(date_breaks = "10 min",
                        date_minor_breaks = "1 min",
@@ -564,18 +582,15 @@ server <- function(input, output, session){
       theme(legend.position = "bottom") -> op1
     
     if (co2_status$co2_mean == 0 & co2_status$co2_var == 0) {
-      # legend("topright", 
-      #        c(expression("CH"[4])), 
-      #        col = "darkorange", pch=19)
       op1
     } else {
       
       #mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
       
-      co2_min = min(data_subset$co2)
-      co2_max = max(data_subset$co2)
-      ch4_min = min(data_subset$ch4)
-      ch4_max = max(data_subset$ch4)
+      co2_min = min(data_subset$co2, na.rm=T)
+      co2_max = max(data_subset$co2, na.rm=T)
+      ch4_min = min(data_subset$ch4, na.rm=T)
+      ch4_max = max(data_subset$ch4, na.rm=T)
       
       ch4_scaled = (co2_max - co2_min)*((data_subset$ch4-ch4_min)/(ch4_max - ch4_min))+co2_min
       ch4_labels = pretty(data_subset$ch4)
@@ -595,12 +610,12 @@ server <- function(input, output, session){
       op1 + 
         geom_point(data = data_subset, aes(datetime, co2_scaled, col = "CO2")) + 
         labs(x = "Datetime",
-             y = bquote("CH"[4]*" (ppm)"),
+             y = input$y_axis,
              col = "") + 
-        scale_y_continuous(sec.axis = sec_axis(trans=~., name = bquote("CO"[2]*" (ppm)"),
+        scale_y_continuous(sec.axis = sec_axis(trans=~., name = input$y2_axis,
                                                breaks = co2_at, labels = co2_labels)) +
         scale_color_manual(limits = c("CH4","CO2"),
-                           labels = c(expression("CH"[4]),expression("CO"[2])),
+                           labels = c(input$y_axis, input$y2_axis),
                            values = c("darkorange", "forestgreen")) +
         scale_x_datetime(date_breaks = "1 hour",
                          date_minor_breaks = "30 min",
@@ -615,7 +630,8 @@ server <- function(input, output, session){
     req(input$file)
     
     data() %>% 
-      reframe(across(co2, c(mean = mean,var = var))) -> co2_status
+      reframe(co2_mean = mean(co2, na.rm =T),
+              co2_var = var(co2, na.rm=T)) -> co2_status
     
     if (!is.null(ranges2$x)) {
       ranges2$x <- as_datetime(ranges2$x)
@@ -642,7 +658,7 @@ server <- function(input, output, session){
       
       if (co2_status$co2_mean == 0 & co2_status$co2_var == 0) {
        
-        results_string <- paste0("<b>CH<sub>4</sub></b>: slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
+        results_string <- paste0(input$y_axis,": slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
                                  ", flux = ", round(ch4_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)",
                                  ", R<sup>2</sup> = ", round(r2_ch4, 2))
         
@@ -650,13 +666,14 @@ server <- function(input, output, session){
                               "id" = as.character(input$sample_id),
                               "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="GMT"),
                               "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="GMT"),
-                              "CH4_slope_h1" = slope_ch4*3600,
-                              "CH4_intercept" = intercept_ch4,
-                              "CH4_R2" = r2_ch4,
+                              "concentration1_name" = input$y_axis,
+                              "concentration1_slope_h1" = slope_ch4*3600,
+                              "concentration1_intercept" = intercept_ch4,
+                              "concentration1_R2" = r2_ch4,
                               "temperature" = mean_temp, 
                               "chamber_volume" = input$chamber_vol,
                               "chamber_area" = input$chamber_area,
-                              "CH4_flux_umol_m2_h1" = ch4_flux*3600)
+                              "concentration1_flux_umol_m2_h1" = ch4_flux*3600)
         
       } else {
         lm_model_co2 <- lm(co2~sec, data = data_subset)
@@ -670,11 +687,11 @@ server <- function(input, output, session){
           co2_flux = NA_real_
         } else {}
         
-        results_string <- paste0("<b>CH<sub>4</sub></b>: slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
+        results_string <- paste0(input$y_axis,": slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
                                  ", flux = ", round(ch4_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)",
                                  ", R<sup>2</sup> = ", round(r2_ch4, 2),
                                  "<br>", 
-                                 "<b>CO<sub>2</sub></b>: slope = ", round(slope_co2*3600, 2), " (ppm h<sup>-1</sup>)", 
+                                 input$y2_axis,": slope = ", round(slope_co2*3600, 2), " (ppm h<sup>-1</sup>)", 
                                  ", flux = ", round(co2_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)", 
                                  ", R<sup>2</sup> = ", round(r2_co2, 2))
         
@@ -682,17 +699,19 @@ server <- function(input, output, session){
                               "id" = as.character(input$sample_id),
                               "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="GMT"),
                               "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="GMT"),
-                              "CH4_slope_h1" = slope_ch4*3600,
-                              "CH4_intercept" = intercept_ch4,
-                              "CH4_R2" = r2_ch4,
-                              "CO2_slope_h1" = slope_co2*3600,
-                              "CO2_intercept" = intercept_co2,
-                              "CO2_R2" = r2_co2,
+                              "concentration1_name" = input$y_axis,
+                              "concentration1_slope_h1" = slope_ch4*3600,
+                              "concentration1_intercept" = intercept_ch4,
+                              "concentration1_R2" = r2_ch4,
+                              "concentration2_name" = input$y2_axis,
+                              "concentration2_slope_h1" = slope_co2*3600,
+                              "concentration2_intercept" = intercept_co2,
+                              "concentration2_R2" = r2_co2,
                               "temperature" = mean_temp, 
                               "chamber_volume" = input$chamber_vol,
                               "chamber_area" = input$chamber_area,
-                              "CH4_flux_umol_m2_h1" = ch4_flux*3600,
-                              "CO2_flux_umol_m2_h1" = co2_flux*3600)
+                              "concentration1_flux_umol_m2_h1" = ch4_flux*3600,
+                              "concentration2_flux_umol_m2_h1" = co2_flux*3600)
       }  
           }else{
             data_subset <- data() %>% 
@@ -719,34 +738,26 @@ server <- function(input, output, session){
     
     zoom_plot_data <- zoom_data$df %>% 
       filter(between(ch4,input$ch4_range[1], input$ch4_range[2]),
-             between(co2,input$co2_range[1],input$co2_range[2]))
+             between(co2,input$co2_range[1],input$co2_range[2]),
+             between(datetime, input$range[1], input$range[2]))
 
     par(mar = c(5,4,4,4) + 0.1)
     
-    # plot(x = zoom_data$df$sec,
-    #      y = zoom_data$df$ch4,
-    #      ylab=expression("CH"[4]*" (ppm)"), 
-    #      xlab="Time steps",
-    #      main= "Zoom plot",
-    #      col = "darkorange")
-    
-    
-    water_min = min(zoom_plot_data$water)
-    ch4_min = min(zoom_plot_data$ch4)
-    ch4_max = max(zoom_plot_data$ch4)
-    water_max = max(zoom_plot_data$water)
+    water_min = min(zoom_plot_data$water,na.rm=T)
+    ch4_min = min(zoom_plot_data$ch4,na.rm=T)
+    ch4_max = max(zoom_plot_data$ch4,na.rm=T)
+    water_max = max(zoom_plot_data$water,na.rm=T)
     water_scaled = (ch4_max - ch4_min)*((zoom_plot_data$water-water_min)/(water_max - water_min))+ch4_min
-    # points(x = zoom_data$df$sec, y = water_scaled, col="lightblue", type="l")
-    
+
     ggplot() + 
       geom_point(data = zoom_plot_data, aes(sec, ch4, col = "CH4")) +
       geom_smooth(data = zoom_plot_data, aes(sec, ch4, col = "CH4"), method = "lm", se = F, formula = 'y ~ x') +
       geom_line(data = zoom_plot_data, aes(sec, water_scaled, col = "H2O")) +
       labs(x = "Time steps",
-           y = bquote("CH"[4]*" (ppm)"),
+           y = input$y_axis,
            col = "") + 
       scale_color_manual(limits = c("CH4","H2O"),
-                         labels = c(expression("CH"[4]),expression("H"[2]*"O")),
+                         labels = c(input$y_axis,expression("H"[2]*"O")),
                          values = c("darkorange", "lightblue")) + 
       theme_bw() + 
       theme(legend.position = "bottom") -> p1
@@ -759,8 +770,8 @@ server <- function(input, output, session){
       
     } else {
       
-      co2_min = min(zoom_plot_data$co2)
-      co2_max = max(zoom_plot_data$co2)
+      co2_min = min(zoom_plot_data$co2, na.rm=T)
+      co2_max = max(zoom_plot_data$co2, na.rm=T)
       
       co2_scaled = (ch4_max - ch4_min)*((zoom_plot_data$co2-co2_min)/(co2_max - co2_min))+ch4_min
       co2_labels = pretty(zoom_plot_data$co2)
@@ -774,31 +785,17 @@ server <- function(input, output, session){
         output$result_string <- renderText(zoom_data$results_string)
       }
       
-      # abline(zoom_data$results$CH4_intercept,
-      #        zoom_data$results$CH4_slope/3600,
-      #        col = "darkorange", lwd = 4)
-      
       lm_model_co2_scaled <- lm(co2_scaled~zoom_plot_data$sec,na.action=na.exclude)
       slope_co2_scaled <- coef(lm_model_co2_scaled)[2]
       intercept_co2_scaled <- coef(lm_model_co2_scaled)[1]
       
-      # abline(intercept_co2_scaled,
-      #        slope_co2_scaled,
-      #        col = "forestgreen", lwd = 4)
-      
-      
-      # legend("topright", 
-      #      c(expression("CH"[4]),expression("CO"[2]), expression("H"[2]*"O")), 
-      #      col = c("darkorange", "forestgreen", "lightblue"), pch=19)
-      
       p1 + 
         geom_point(data = zoom_plot_data, aes(sec, co2_scaled, col = "CO2")) +
         geom_smooth(data = zoom_plot_data, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F,formula = 'y ~ x') + 
-        #geom_abline(slope = slope_co2_scaled, intercept = intercept_co2_scaled, aes(col = "CO2")) +
         scale_color_manual(limits = c("CH4","CO2","H2O"),
-                           labels = c(expression("CH"[4]),expression("CO"[2]),expression("H"[2]*"O")),
+                           labels = c(input$y_axis,input$y2_axis,expression("H"[2]*"O")),
                            values = c("darkorange","forestgreen", "lightblue")) +
-        scale_y_continuous(sec.axis = sec_axis(trans=~., name = bquote("CO"[2]*" (ppm)"),
+        scale_y_continuous(sec.axis = sec_axis(trans=~., name = input$y2_axis,
                                                breaks = co2_at, labels = co2_labels)) 
     }
   })
@@ -820,7 +817,7 @@ server <- function(input, output, session){
       mutate(across(where(is.double), ~round(.x, 3)))
     output$results <- renderDT(
       data_out %>% 
-        select_if(names(.) %in% c("id", "start", "end","CH4_R2", "CH4_flux_umol_m2_h1","CO2_R2", "CO2_flux_umol_m2_h1")),
+        select_if(names(.) %in% c("id", "start", "end","concentration1_name","concentration1_R2", "concentration1_flux_umol_m2_h1","concentration2_name","concentration2_R2", "concentration2_flux_umol_m2_h1")),
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames= FALSE)
   })
@@ -978,12 +975,12 @@ server <- function(input, output, session){
   output$ch4_download <- downloadHandler(
     
     filename = function() {
-      paste0(Sys.Date(), "_ch4data.csv")
+      paste0(Sys.Date(), "_data.csv")
     },
     
     content = function(file) {
       data() %>% 
-        rename('rh (%)' = rh, 'airt (°C)' = airt, 'CO2 (ppm)' = co2, 'CH4 (ppm)' = ch4, "H2O (ppm)" = water)  %>% 
+        rename('rh (%)' = rh, 'airt (°C)' = airt, 'concentration2' = co2, 'concentration1' = ch4, "H2O (ppm)" = water)  %>% 
         write.csv(data_write, file, row.names = FALSE)
     })  
 
