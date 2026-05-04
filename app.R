@@ -204,8 +204,8 @@ ui <- dashboardPage(
               column(4,
                      numericInput("atm_pres", NULL, 1, min = 0))),
             
-            textInput("y_axis", "First concentration name"),
-            textInput("y2_axis", "Second concentration name"),
+            textInput("first_con_name", "First concentration name"),
+            textInput("second_con_name", "Second concentration name"),
             
           ),
           
@@ -304,7 +304,7 @@ ui <- dashboardPage(
                     sidebarPanel(
                       selectInput("concentration_values_diff","Select concentration column",
                                   choices = c(colnames(data())),
-                                  selected = "ch4"),
+                                  selected = "CH4"),
                       tags$b("Only calculate diffusive fluxes where there has been no previous bubbles"),
                       checkboxInput("look_for_bubbles","Look for bubbles",value = T),
                       sliderInput("remove_observations_prior", "How many observations to remove prior to calculations of diffusive flux",
@@ -348,10 +348,11 @@ ui <- dashboardPage(
 server <- function(input, output, session){
   data <- reactive({
 
-      
   if(input$file_type == "DIY"){  
     req(input$file)
     req(input$timezone)
+    updateTextInput(session, "first_con_name", value = "CH4")
+    updateTextInput(session, "second_con_name", value = "CO2")
     if(input$calibration_choice == "Jonas"){        
       req(input$sensor_name)  
         model_coef %>% 
@@ -420,15 +421,15 @@ server <- function(input, output, session){
                airt = as.numeric(tempC),
                abs_H = (6.112*exp((17.67*airt)/(airt+243.5))*rh*18.02)/((273.15+airt)*100*0.08314),
                ppm_H20 = 1358.326542*abs_H,
-               co2 = (K33_CO2/(1-(ppm_H20/10^6))),
+               second_concentration = (K33_CO2/(1-(ppm_H20/10^6))),
                V0 = abs_H*g+s,
                RsR0 = ((5000/ch4_smv)-1)/((5000/V0)-1),
-               ch4 = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + k,
+               first_concentration = a*(RsR0^b)+c*abs_H*(a*RsR0^b) + k,
                datetime = datetime+(input$timezone-1)*3600) %>% 
         rename(water = ppm_H20) %>% 
         group_by(datetime) %>% 
-        summarise_at(vars(rh, airt, co2, ch4, water,PumpCycle), list(mean)) %>% 
-        select(datetime, rh, airt, co2, ch4, water,PumpCycle) 
+        summarise_at(vars(rh, airt, second_concentration, first_concentration, water,PumpCycle), list(mean)) %>% 
+        select(datetime, rh, airt, second_concentration, first_concentration, water,PumpCycle) 
         } else {
       req(input$file)
       req(input$file_format)
@@ -457,8 +458,8 @@ server <- function(input, output, session){
       file_upload %>% 
         cbind(datetime_format,unit1,unit2) %>% 
         rename(datetime = any_of(input$datetime_column),
-               ch4 = any_of(input$concentration_values_ch4_column),
-               co2 = any_of(input$concentration_values_co2_column),
+               first_concentration = any_of(input$concentration_values_ch4_column),
+               second_concentration = any_of(input$concentration_values_co2_column),
                water = any_of(input$water_column),
                airt = any_of(input$airt_column),
                PumpCycle = any_of(input$sep_column)) %>%
@@ -466,43 +467,42 @@ server <- function(input, output, session){
                                     datetime_format == "YDM-HMS" ~ ydm_hms(datetime),
                                     datetime_format == "MDY-HMS" ~ mdy_hms(datetime),
                                     datetime_format == "DMY-HMS" ~ dmy_hms(datetime)),
-               across(any_of(c("ch4","co2","water","airt","PumpCycle")), ~ parse_number(.x))) %>% 
-        select_if(names(.) %in% c('datetime', 'airt', 'co2',"ch4","water","PumpCycle")) -> df
+               across(any_of(c("first_concentration","second_concentration","water","airt","PumpCycle")), ~ parse_number(.x))) %>% 
+        select_if(names(.) %in% c('datetime', 'airt', 'second_concentration',"first_concentration","water","PumpCycle")) -> df
       
       
       if(input$unit_concentration1 == "ppb") {
       df <- df %>% 
-        mutate(ch4 = ch4/1000)
+        mutate(first_concentration = first_concentration/1000)
       }
       if(input$unit_concentration2 == "ppb") {
         df <- df %>% 
-          mutate(co2 = co2/1000)
+          mutate(second_concentration = second_concentration/1000)
       }
       
       
         if(!"PumpCycle" %in% colnames(df)) {
-          df <- df %>% mutate(PumpCycle = 1)
+          df <- mutate(df, PumpCycle = 1)
         }
         if(!"co2" %in% colnames(df)){
-          df <- df %>% mutate(co2 = 0)
+          df <- mutate(df, co2 = 0)
         }
         if(!"water" %in% colnames(df)){
-          df <- df %>% mutate(water = 0)
+          df <- mutate(df, water = 0)
         }
         if(!"airt" %in% colnames(df)){
-          df <- df %>% mutate(airt = 0)
+          df <- mutate(df, airt = 0)
         }
-      
       }
     
     time_start <- min(df$datetime, na.rm =T)
     time_end <- max(df$datetime, na.rm =T)
     
-    ch4_start <- floor(min(df$ch4, na.rm=T))
-    ch4_end <- ceiling(max(df$ch4, na.rm=T))
+    ch4_start <- floor(min(df$first_concentration, na.rm=T))
+    ch4_end <- ceiling(max(df$first_concentration, na.rm=T))
     
-    co2_start <- floor(min(df$co2, na.rm =T))
-    co2_end <- ceiling(max(df$co2, na.rm =T))
+    co2_start <- floor(min(df$second_concentration, na.rm =T))
+    co2_end <- ceiling(max(df$second_concentration, na.rm =T))
     
     updateSliderInput(session, "range", value = c(time_start, time_end),
                       min = time_start, max = time_end, step = 60)
@@ -513,9 +513,18 @@ server <- function(input, output, session){
     updateSliderInput(session, "co2_range", value = c(co2_start, co2_end),
                       min = co2_start, max = co2_end, step = 1)
     
-    updateSelectInput(session, "concentration_values", choices = colnames(df), select = "ch4")
-    updateSelectInput(session, "concentration_values_diff", choices = colnames(df), select = "ch4")
+    if(nchar(input$first_con_name)>0) {
+      names(df)[names(df) == "first_concentration"] <- input$first_con_name
+    }
+    
+    if(nchar(input$second_con_name)>0) {
+      names(df)[names(df) == "second_concentration"] <- input$second_con_name
+    }
+    
+    updateSelectInput(session, "concentration_values", choices = colnames(df), select = "CH4")
+    updateSelectInput(session, "concentration_values_diff", choices = colnames(df), select = "CH4")
     updateSelectInput(session, "datetime_column", choices = colnames(df), select = "NA_character_")
+    
     return(df)
   })
   
@@ -551,6 +560,10 @@ server <- function(input, output, session){
     })
   })
   
+    observeEvent(input$concentration_values_co2_column, {
+      updateTextInput(session, "second_con_name", value = input$concentration_values_co2_column)
+    }, ignoreInit = TRUE)
+  
   data_out <- data.frame()
   
   output$plot <- renderPlot({
@@ -558,24 +571,28 @@ server <- function(input, output, session){
       validate(
         need(input$datetime_column, message = "Needs to input datetime column"),
         need(input$concentration_values_ch4_column, message = "Needs to input first concentration column"))
-    } 
+      
+      updateTextInput(session, "first_con_name", value = input$concentration_values_ch4_column)
+      } 
+    
     req(data())
+    req(input$first_con_name)
     data_subset <- data() %>% 
       filter(between(datetime, input$range[1], input$range[2]),
-             between(ch4, input$ch4_range[1],input$ch4_range[2]),
-             between(co2, input$co2_range[1],input$co2_range[2]))
+             between(.data[[input$first_con_name]], input$ch4_range[1],input$ch4_range[2]))
     
-    data() %>% 
-      reframe(co2_mean = mean(co2, na.rm =T),
-              co2_var = var(co2, na.rm=T)) -> co2_status
+    if(nchar(input$second_con_name)>0){
+      data_subset <- data_subset %>% 
+        filter(between(.data[[input$second_con_name]], input$co2_range[1],input$co2_range[2]))
+    }
     
     ggplot() + 
-      geom_point(data = data_subset, aes(datetime, ch4, col = "CH4")) + 
+      geom_point(data = data_subset, aes(.data$datetime, .data[[input$first_con_name]], col = "CH4")) + 
       labs(x = "Datetime",
-           y = input$y_axis,
+           y = input$first_con_name,
            col = "") + 
-      scale_color_manual(limits = c("CH4"),
-                         labels = input$y_axis,
+      scale_color_manual(
+                         labels = input$first_con_name,
                          values = c("darkorange")) + 
       scale_x_datetime(date_breaks = "10 min",
                        date_minor_breaks = "1 min",
@@ -583,41 +600,32 @@ server <- function(input, output, session){
       theme_bw() + 
       theme(legend.position = "bottom") -> op1
     
-    if (co2_status$co2_mean == 0 & co2_status$co2_var == 0) {
+    if (nchar(input$second_con_name)==0) {
       op1
     } else {
       
-      #mtext(expression("CO"[2]*" (ppm)"), side = 4, line = 3, col="forestgreen")
+      co2_min = min(data_subset[[input$second_con_name]], na.rm=T)
+      co2_max = max(data_subset[[input$second_con_name]], na.rm=T)
+      ch4_min = min(data_subset[[input$first_con_name]], na.rm=T)
+      ch4_max = max(data_subset[[input$first_con_name]], na.rm=T)
       
-      co2_min = min(data_subset$co2, na.rm=T)
-      co2_max = max(data_subset$co2, na.rm=T)
-      ch4_min = min(data_subset$ch4, na.rm=T)
-      ch4_max = max(data_subset$ch4, na.rm=T)
-      
-      ch4_scaled = (co2_max - co2_min)*((data_subset$ch4-ch4_min)/(ch4_max - ch4_min))+co2_min
-      ch4_labels = pretty(data_subset$ch4)
+      ch4_scaled = (co2_max - co2_min)*((data_subset[[input$first_con_name]]-ch4_min)/(ch4_max - ch4_min))+co2_min
+      ch4_labels = pretty(data_subset[[input$first_con_name]])
       ch4_at = (co2_max - co2_min)*((ch4_labels-ch4_min)/(ch4_max - ch4_min))+co2_min
       
-      co2_scaled = (ch4_max - ch4_min)*((data_subset$co2-co2_min)/(co2_max - co2_min))+ch4_min
-      co2_labels = pretty(data_subset$co2)
+      co2_scaled = (ch4_max - ch4_min)*((data_subset[[input$second_con_name]]-co2_min)/(co2_max - co2_min))+ch4_min
+      co2_labels = pretty(data_subset[[input$second_con_name]])
       co2_at = (ch4_max - ch4_min)*((co2_labels-co2_min)/(co2_max - co2_min))+ch4_min
-      
-      # points(x = data_subset$datetime, y = co2_scaled, col="forestgreen")
-      # axis(4, at = co2_at, labels = co2_labels, col="forestgreen", col.ticks="forestgreen")
-      # 
-      # legend("topright", 
-      #        c(expression("CH"[4]), expression("CO"[2])), 
-      #        col = c("darkorange","forestgreen"), pch=19)
       
       op1 + 
         geom_point(data = data_subset, aes(datetime, co2_scaled, col = "CO2")) + 
         labs(x = "Datetime",
-             y = input$y_axis,
+             y = input$first_con_name,
              col = "") + 
-        scale_y_continuous(sec.axis = sec_axis(trans=~., name = input$y2_axis,
+        scale_y_continuous(sec.axis = sec_axis(trans=~., name = input$second_con_name,
                                                breaks = co2_at, labels = co2_labels)) +
         scale_color_manual(limits = c("CH4","CO2"),
-                           labels = c(input$y_axis, input$y2_axis),
+                           labels = c(input$first_con_name, input$second_con_name),
                            values = c("darkorange", "forestgreen")) +
         scale_x_datetime(date_breaks = "1 hour",
                          date_minor_breaks = "30 min",
@@ -631,10 +639,6 @@ server <- function(input, output, session){
   data_subset <- reactive({
     req(input$file)
     
-    data() %>% 
-      reframe(co2_mean = mean(co2, na.rm =T),
-              co2_var = var(co2, na.rm=T)) -> co2_status
-    
     if (!is.null(ranges2$x)) {
       ranges2$x <- as_datetime(ranges2$x)
       
@@ -642,7 +646,7 @@ server <- function(input, output, session){
         filter(between(datetime, ranges2$x[1], ranges2$x[2])) %>%
         mutate(sec = cumsum(c(0, diff(as.numeric(datetime))))) 
       
-      lm_model_ch4 <- lm(ch4~sec, data = data_subset)
+      lm_model_ch4 <- lm(data_subset[[input$first_con_name]]~sec, data = data_subset)
       slope_ch4 <- coef(lm_model_ch4)[2]
       intercept_ch4 <- coef(lm_model_ch4)[1]
       r2_ch4 <- summary(lm_model_ch4)$r.squared
@@ -658,9 +662,9 @@ server <- function(input, output, session){
         ch4_flux = NA_real_
       } else {}
       
-      if (co2_status$co2_mean == 0 & co2_status$co2_var == 0) {
+      if (nchar(input$second_con_name)==0) {
        
-        results_string <- paste0(input$y_axis,": slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
+        results_string <- paste0(input$first_con_name,": slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
                                  ", flux = ", round(ch4_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)",
                                  ", R<sup>2</sup> = ", round(r2_ch4, 2))
         
@@ -668,7 +672,7 @@ server <- function(input, output, session){
                               "id" = as.character(input$sample_id),
                               "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="GMT"),
                               "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="GMT"),
-                              "concentration1_name" = input$y_axis,
+                              "concentration1_name" = input$first_con_name,
                               "concentration1_slope_h1" = slope_ch4*3600,
                               "concentration1_intercept" = intercept_ch4,
                               "concentration1_R2" = r2_ch4,
@@ -678,7 +682,7 @@ server <- function(input, output, session){
                               "concentration1_flux_umol_m2_h1" = ch4_flux*3600)
         
       } else {
-        lm_model_co2 <- lm(co2~sec, data = data_subset)
+        lm_model_co2 <- lm(data_subset[[input$second_con_name]]~sec, data = data_subset)
         slope_co2 <- coef(lm_model_co2)[2]
         intercept_co2 <- coef(lm_model_co2)[1]
         r2_co2 <- summary(lm_model_co2)$r.squared
@@ -689,11 +693,11 @@ server <- function(input, output, session){
           co2_flux = NA_real_
         } else {}
         
-        results_string <- paste0(input$y_axis,": slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
+        results_string <- paste0(input$first_con_name,": slope = ", round(slope_ch4*3600, 2), " (ppm h<sup>-1</sup>)",
                                  ", flux = ", round(ch4_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)",
                                  ", R<sup>2</sup> = ", round(r2_ch4, 2),
                                  "<br>", 
-                                 input$y2_axis,": slope = ", round(slope_co2*3600, 2), " (ppm h<sup>-1</sup>)", 
+                                 input$second_con_name,": slope = ", round(slope_co2*3600, 2), " (ppm h<sup>-1</sup>)", 
                                  ", flux = ", round(co2_flux*3600, 2), " (µmol m<sup>-2</sup> h<sup>-1</sup>)", 
                                  ", R<sup>2</sup> = ", round(r2_co2, 2))
         
@@ -701,11 +705,11 @@ server <- function(input, output, session){
                               "id" = as.character(input$sample_id),
                               "start" = strftime(ranges2$x[1], "%Y-%m-%d %H:%M:%S", tz="GMT"),
                               "end" = strftime(ranges2$x[2], "%Y-%m-%d %H:%M:%S", tz="GMT"),
-                              "concentration1_name" = input$y_axis,
+                              "concentration1_name" = input$first_con_name,
                               "concentration1_slope_h1" = slope_ch4*3600,
                               "concentration1_intercept" = intercept_ch4,
                               "concentration1_R2" = r2_ch4,
-                              "concentration2_name" = input$y2_axis,
+                              "concentration2_name" = input$second_con_name,
                               "concentration2_slope_h1" = slope_co2*3600,
                               "concentration2_intercept" = intercept_co2,
                               "concentration2_R2" = r2_co2,
@@ -724,8 +728,7 @@ server <- function(input, output, session){
           }
     return(list("df" = data_subset, 
                 "results" = results, 
-                "results_string" = results_string,
-                "co2_status" = co2_status))
+                "results_string" = results_string))
     
               })
   
@@ -735,36 +738,40 @@ server <- function(input, output, session){
         need(input$datetime_column, message = ""),
         need(input$concentration_values_ch4_column, message = ""))
     } else {}
+    req(data_subset())
     zoom_data <- data_subset() 
-    
-    
+    req(input$first_con_name)
     zoom_plot_data <- zoom_data$df %>% 
-      filter(between(ch4,input$ch4_range[1], input$ch4_range[2]),
-             between(co2,input$co2_range[1],input$co2_range[2]),
+      filter(between(.data[[input$first_con_name]],input$ch4_range[1], input$ch4_range[2]),
              between(datetime, input$range[1], input$range[2]))
+    
+    if(nchar(input$second_con_name)>0){
+      zoom_plot_data <- zoom_plot_data %>% 
+        filter(between(.data[[input$second_con_name]],input$co2_range[1],input$co2_range[2]))
+    }
 
     par(mar = c(5,4,4,4) + 0.1)
     
     water_min = min(zoom_plot_data$water,na.rm=T)
-    ch4_min = min(zoom_plot_data$ch4,na.rm=T)
-    ch4_max = max(zoom_plot_data$ch4,na.rm=T)
+    ch4_min = min(zoom_plot_data[[input$first_con_name]],na.rm=T)
+    ch4_max = max(zoom_plot_data[[input$first_con_name]],na.rm=T)
     water_max = max(zoom_plot_data$water,na.rm=T)
     water_scaled = (ch4_max - ch4_min)*((zoom_plot_data$water-water_min)/(water_max - water_min))+ch4_min
 
     ggplot() + 
-      geom_point(data = zoom_plot_data, aes(sec, ch4, col = "CH4")) +
-      geom_smooth(data = zoom_plot_data, aes(sec, ch4, col = "CH4"), method = "lm", se = F, formula = 'y ~ x') +
+      geom_point(data = zoom_plot_data, aes(.data$sec, .data[[input$first_con_name]], col = "CH4")) +
+      geom_smooth(data = zoom_plot_data, aes(.data$sec, .data[[input$first_con_name]], col = "CH4"), method = "lm", se = F, formula = 'y ~ x') +
       geom_line(data = zoom_plot_data, aes(sec, water_scaled, col = "H2O")) +
       labs(x = "Time steps",
-           y = input$y_axis,
+           y = input$first_con_name,
            col = "") + 
       scale_color_manual(limits = c("CH4","H2O"),
-                         labels = c(input$y_axis,expression("H"[2]*"O")),
+                         labels = c(input$first_con_name,expression("H"[2]*"O")),
                          values = c("darkorange", "lightblue")) + 
       theme_bw() + 
       theme(legend.position = "bottom") -> p1
     
-    if (zoom_data$co2_status$co2_mean == 0 & zoom_data$co2_status$co2_var == 0) {
+    if (nchar(input$second_con_name)==0) {
       print(p1)
       if (!is.null(ranges2$x)){
         output$result_string <- renderText(zoom_data$results_string)
@@ -772,22 +779,22 @@ server <- function(input, output, session){
       
     } else {
       
-      co2_min = min(zoom_plot_data$co2, na.rm=T)
-      co2_max = max(zoom_plot_data$co2, na.rm=T)
+      co2_min = min(zoom_plot_data[[input$second_con_name]], na.rm=T)
+      co2_max = max(zoom_plot_data[[input$second_con_name]], na.rm=T)
       
-      co2_scaled = (ch4_max - ch4_min)*((zoom_plot_data$co2-co2_min)/(co2_max - co2_min))+ch4_min
-      co2_labels = pretty(zoom_plot_data$co2)
+      co2_scaled = (ch4_max - ch4_min)*((zoom_plot_data[[input$second_con_name]]-co2_min)/(co2_max - co2_min))+ch4_min
+      co2_labels = pretty(zoom_plot_data[[input$second_con_name]])
       co2_at = (ch4_max - ch4_min)*((co2_labels-co2_min)/(co2_max - co2_min))+ch4_min
       
-      ch4_scaled = (co2_max - co2_min)*((zoom_plot_data$ch4-ch4_min)/(ch4_max - ch4_min))+co2_min
-      ch4_labels = pretty(zoom_plot_data$ch4)
+      ch4_scaled = (co2_max - co2_min)*((zoom_plot_data[[input$first_con_name]]-ch4_min)/(ch4_max - ch4_min))+co2_min
+      ch4_labels = pretty(zoom_plot_data[[input$first_con_name]])
       ch4_at = (co2_max - co2_min)*((ch4_labels-ch4_min)/(ch4_max - ch4_min))+co2_min
       
       if (!is.null(ranges2$x)){
         output$result_string <- renderText(zoom_data$results_string)
       }
       
-      lm_model_co2_scaled <- lm(co2_scaled~zoom_plot_data$sec,na.action=na.exclude)
+      lm_model_co2_scaled <- lm(co2_scaled~zoom_plot_data$sec, na.action=na.exclude)
       slope_co2_scaled <- coef(lm_model_co2_scaled)[2]
       intercept_co2_scaled <- coef(lm_model_co2_scaled)[1]
       
@@ -795,9 +802,9 @@ server <- function(input, output, session){
         geom_point(data = zoom_plot_data, aes(sec, co2_scaled, col = "CO2")) +
         geom_smooth(data = zoom_plot_data, aes(sec, co2_scaled, col = "CO2"), method = "lm", se = F,formula = 'y ~ x') + 
         scale_color_manual(limits = c("CH4","CO2","H2O"),
-                           labels = c(input$y_axis,input$y2_axis,expression("H"[2]*"O")),
+                           labels = c(input$first_con_name,input$second_con_name,expression("H"[2]*"O")),
                            values = c("darkorange","forestgreen", "lightblue")) +
-        scale_y_continuous(sec.axis = sec_axis(trans=~., name = input$y2_axis,
+        scale_y_continuous(sec.axis = sec_axis(trans=~., name = input$second_con_name,
                                                breaks = co2_at, labels = co2_labels)) 
     }
   })
@@ -838,14 +845,27 @@ server <- function(input, output, session){
   # FluxSeparator ----
   ## Ebul ----
   fluxsep_ebul <- reactive({
-    data() %>% 
-      filter(between(datetime, input$range[1], input$range[2]),
-             between(ch4, input$ch4_range[1],input$ch4_range[2]),
-             between(co2, input$co2_range[1],input$co2_range[2])) %>% 
-      ungroup %>% 
-      mutate(station = 1,
-             plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot)+1,
-             sensor = 1)  -> ebul_df
+    req(data())
+    
+    if(nchar(input$second_con_name)==0) {
+      data() %>% 
+        filter(between(datetime, input$range[1], input$range[2]),
+               between(.data[[input$first_con_name]], input$ch4_range[1],input$ch4_range[2])) %>% 
+        ungroup %>% 
+        mutate(station = 1,
+               plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot)+1,
+               sensor = 1)  -> ebul_df
+      } else {
+    
+      data() %>% 
+        filter(between(datetime, input$range[1], input$range[2]),
+               between(.data[[input$first_con_name]], input$ch4_range[1],input$ch4_range[2]),
+               between(.data[[input$second_con_name]], input$co2_range[1],input$co2_range[2])) %>% 
+        ungroup %>% 
+        mutate(station = 1,
+               plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot)+1,
+               sensor = 1)  -> ebul_df
+      }
     
     ebul_df %>% 
       filter(plot_number == input$plot_number_select) %>% 
@@ -895,14 +915,26 @@ server <- function(input, output, session){
   
   ## Diff ----
   fluxsep_diff <- reactive({
-    data() %>% 
-      filter(between(datetime, input$range[1], input$range[2]),
-             between(ch4, input$ch4_range[1],input$ch4_range[2]),
-             between(co2, input$co2_range[1],input$co2_range[2])) %>% 
-      ungroup %>% 
-      mutate(station = "1",
-             plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot_diff)+1,
-             sensor = "1")  -> diff_df
+    req(data())
+    
+    if(nchar(input$second_con_name)==0) {
+      data() %>% 
+        filter(between(datetime, input$range[1], input$range[2]),
+               between(.data[[input$first_con_name]], input$ch4_range[1],input$ch4_range[2]))  %>% 
+        ungroup %>% 
+        mutate(station = "1",
+               plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot_diff)+1,
+               sensor = "1")  -> diff_df
+    } else {
+      data() %>% 
+        filter(between(datetime, input$range[1], input$range[2]),
+               between(.data[[input$first_con_name]], input$ch4_range[1],input$ch4_range[2]),
+               between(.data[[input$second_con_name]], input$co2_range[1],input$co2_range[2])) %>% 
+        ungroup %>% 
+        mutate(station = "1",
+               plot_number = floor((PumpCycle-min(PumpCycle))/input$number_of_pumpcycles_in_plot_diff)+1,
+               sensor = "1") -> diff_df
+    }
 
     diff_df %>% 
       filter(plot_number == input$plot_number_select_diff) %>% 
@@ -993,7 +1025,7 @@ server <- function(input, output, session){
     
     content = function(file) {
       data() %>% 
-        rename('rh (%)' = rh, 'airt (°C)' = airt, 'concentration2' = co2, 'concentration1' = ch4, "H2O (ppm)" = water)  %>% 
+        rename('rh (%)' = rh, 'airt (°C)' = airt, "H2O (ppm)" = water)  %>% 
         write.csv(data_write, file, row.names = FALSE)
     })  
 
